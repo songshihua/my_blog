@@ -1,0 +1,32 @@
+services:
+  db:
+    ports:
+      - 127.0.0.1:${MYSQL_HOST_PORT:-3307}:3306
+    volumes:
+      - ./deploy/mysql/init-test-database.sh:/docker-entrypoint-initdb.d/20-test-database.sh:ro
+    networks:
+      - backend
+      - devhost
+
+  backend:
+    command: python manage.py runserver 0.0.0.0:8000
+    ports:
+      - 127.0.0.1:8000:8000
+    volumes:
+      - ./backend:/app/backend
+      - ./data/static:/app/data/static
+      - ./data/media:/app/data/media
+
+  frontend:
+    command: npm run dev -- --host 0.0.0.0
+    ports:
+      - 127.0.0.1:3000:3000
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+
+volumes:
+  frontend_node_modules:
+
+networks:
+  devhost:

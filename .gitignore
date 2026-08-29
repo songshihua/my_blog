@@ -1,0 +1,40 @@
+# Local secrets
+.env
+.env.*
+!.env.example
+frontend/.env.local
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node / frontend output
+frontend/node_modules/
+frontend/.next/
+frontend/dist/
+frontend/.wrangler/
+
+# Runtime data
+data/static/*
+!data/static/.gitkeep
+data/media/*
+!data/media/.gitkeep
+backups/*
+!backups/.gitkeep
+*.sqlite3
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Codex working files
+.codex-work/
+.tmp/

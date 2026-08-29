@@ -1,0 +1,19 @@
+# Direct dependency versions validated on 2026-08-29 with Python 3.13 and MySQL 8.4.
+Django==5.2.17
+djangorestframework==3.16.1
+django-cors-headers==4.9.0
+django-filter==25.2
+drf-spectacular==0.28.0
+mysqlclient==2.2.8
+Pillow==12.3.0
+httpx==0.28.1
+feedparser==6.0.14
+python-dotenv==1.2.3
+gunicorn==23.0.0
+pytest==8.4.2
+pytest-django==4.14.0
+pytest-cov==6.3.0
+factory-boy==3.3.3
+ruff==0.16.5
+mypy==1.20.2
+django-stubs==5.2.9

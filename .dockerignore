@@ -1,0 +1,16 @@
+.git
+.github
+.venv
+.env
+.codex-work
+.tmp
+frontend/node_modules
+frontend/.next
+frontend/dist
+**/__pycache__
+**/*.py[cod]
+.pytest_cache
+.coverage
+data
+backups
+*.sqlite3

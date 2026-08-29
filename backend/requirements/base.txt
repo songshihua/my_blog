@@ -1,0 +1,11 @@
+-c constraints.txt
+Django>=5.2,<5.3
+djangorestframework>=3.16,<3.17
+django-cors-headers>=4.7,<5
+django-filter>=25.1,<26
+drf-spectacular>=0.28,<0.29
+mysqlclient>=2.2,<3
+Pillow>=11,<13
+httpx>=0.28,<1
+feedparser>=6,<7
+python-dotenv>=1.0,<2

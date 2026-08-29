@@ -1,0 +1,31 @@
+services:
+  backend:
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
+      MYSQL_HOST: db
+      MYSQL_PORT: 3306
+
+  nginx:
+    image: nginx:1.28-alpine
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - ${NGINX_CONF:-./deploy/nginx/http.conf}:/etc/nginx/conf.d/default.conf:ro
+      - static_data:/srv/static:ro
+      - media_data:/srv/media:ro
+      - ./deploy/certbot/www:/var/www/certbot:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    networks:
+      - frontend
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
