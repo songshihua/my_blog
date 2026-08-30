@@ -5,8 +5,24 @@ from .models import IngestionRun, RadarItem, RadarSource
 
 @admin.register(RadarSource)
 class RadarSourceAdmin(admin.ModelAdmin):
-    list_display = ("name", "source_type", "is_enabled", "status", "last_success_at")
+    list_display = (
+        "name",
+        "source_type",
+        "is_enabled",
+        "status",
+        "last_item_count",
+        "last_success_at",
+    )
     list_filter = ("is_enabled", "status", "source_type")
+    readonly_fields = (
+        "status",
+        "last_attempt_at",
+        "last_success_at",
+        "last_error_at",
+        "last_error_summary",
+        "last_item_count",
+        "sync_state",
+    )
 
 
 @admin.register(RadarItem)

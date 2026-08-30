@@ -9,6 +9,7 @@ class RadarSource(TimeStampedModel):
         ARXIV = "arxiv", "arXiv"
         GITHUB = "github", "GitHub"
         HUGGINGFACE = "huggingface", "Hugging Face"
+        DEEPSEEK = "deepseek", "DeepSeek AI Search"
         OPENREVIEW = "openreview", "OpenReview"
 
     class Status(models.TextChoices):
@@ -28,8 +29,11 @@ class RadarSource(TimeStampedModel):
         "状态", max_length=16, choices=Status.choices, default=Status.DISABLED
     )
     last_success_at = models.DateTimeField("最后成功时间", blank=True, null=True)
+    last_attempt_at = models.DateTimeField("最后尝试时间", blank=True, null=True)
+    last_item_count = models.PositiveIntegerField("最近条目数", default=0)
     last_error_at = models.DateTimeField("最后失败时间", blank=True, null=True)
     last_error_summary = models.CharField("最后错误摘要", max_length=500, blank=True)
+    sync_state = models.JSONField("同步状态", default=dict, blank=True)
 
     class Meta:
         ordering = ("name",)
@@ -50,6 +54,7 @@ class RadarItem(TimeStampedModel):
         PAPER = "paper", "论文"
         REPOSITORY = "repository", "开源项目"
         MODEL = "model", "模型"
+        DATASET = "dataset", "数据集"
         ARTICLE = "article", "文章"
 
     source = models.ForeignKey(

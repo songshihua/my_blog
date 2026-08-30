@@ -1,28 +1,10 @@
 """Run configured radar providers as an idempotent one-shot task."""
 
-from contextlib import contextmanager
-
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
-from django.db import connection
-from django.utils import timezone
 
-from apps.radar.models import IngestionRun, RadarSource
-
-
-@contextmanager
-def mysql_named_lock(name: str):
-    """Fail fast when another ingestion job owns the same MySQL lock."""
-
-    with connection.cursor() as cursor:
-        cursor.execute("SELECT GET_LOCK(%s, 0)", [name])
-        acquired = cursor.fetchone()[0] == 1
-    if not acquired:
-        raise CommandError(f"Another ingestion task is already running: {name}")
-    try:
-        yield
-    finally:
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT RELEASE_LOCK(%s)", [name])
+from apps.radar.models import RadarSource
+from apps.radar.services import RadarSyncAlreadyRunning, synchronize_source_types
 
 
 class Command(BaseCommand):
@@ -33,41 +15,43 @@ class Command(BaseCommand):
             "--source", choices=[choice[0] for choice in RadarSource.SourceType.choices]
         )
         parser.add_argument(
+            "--limit",
+            type=int,
+            default=settings.RADAR_SYNC_LIMIT,
+            help="Maximum records per provider (1-100).",
+        )
+        parser.add_argument(
             "--dry-run",
             action="store_true",
             help="Validate scheduling and locks without calling external providers.",
         )
 
     def handle(self, *args, **options):
-        sources = RadarSource.objects.filter(is_enabled=True)
-        if options["source"]:
-            sources = sources.filter(source_type=options["source"])
+        limit = max(1, min(options["limit"], 100))
+        source_types = [options["source"]] if options["source"] else None
+        try:
+            results = synchronize_source_types(
+                source_types,
+                limit=limit,
+                dry_run=options["dry_run"],
+            )
+        except RadarSyncAlreadyRunning as exc:
+            raise CommandError(str(exc)) from exc
 
-        with mysql_named_lock("song_blog_ingest_sources"):
-            if not sources.exists():
-                self.stdout.write("No enabled radar sources; nothing was synchronized.")
-                return
+        if not results:
+            self.stdout.write("No enabled radar sources; nothing was synchronized.")
+            return
 
-            for source in sources:
-                run = IngestionRun.objects.create(
-                    source=source,
-                    status=IngestionRun.Status.RUNNING,
-                )
-                source.status = RadarSource.Status.RUNNING
-                source.save(update_fields=("status", "updated_at"))
+        failed_sources: list[str] = []
+        for result in results:
+            outcome = result.outcome
+            self.stdout.write(
+                f"{result.name}: {outcome.status} "
+                f"(inserted={outcome.inserted}, updated={outcome.updated}, "
+                f"skipped={outcome.skipped})"
+            )
+            if outcome.status == "failed":
+                failed_sources.append(result.name)
 
-                # The first local phase intentionally ships no anonymous sync endpoint
-                # and no implicit network calls. Provider adapters are added only after
-                # credentials, rate limits, and source-specific tests are configured.
-                run.status = IngestionRun.Status.SKIPPED
-                run.skipped_count = 1
-                run.finished_at = timezone.now()
-                run.error_summary = (
-                    "Dry run requested."
-                    if options["dry_run"]
-                    else "Provider adapter is not configured."
-                )
-                run.save()
-                source.status = RadarSource.Status.IDLE
-                source.save(update_fields=("status", "updated_at"))
-                self.stdout.write(f"Skipped {source.name}: {run.error_summary}")
+        if failed_sources:
+            raise CommandError(f"Synchronization failed: {', '.join(failed_sources)}")

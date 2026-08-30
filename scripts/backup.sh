@@ -15,7 +15,7 @@ media_file="$backup_dir/media_${timestamp}.tar.gz"
   sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysqldump -h 127.0.0.1 -u"$MYSQL_USER" --single-transaction --quick --routines --events --triggers --no-tablespaces "$MYSQL_DATABASE"' \
   | gzip -9 > "$db_file"
 
-tar -C "$project_dir/data" -czf "$media_file" media
+tar -C "$project_dir/data" -czf "$media_file" media notes
 test -s "$db_file"
 test -s "$media_file"
 sha256sum "$db_file" "$media_file" > "$backup_dir/checksums_${timestamp}.sha256"

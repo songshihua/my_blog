@@ -100,9 +100,33 @@ class Command(BaseCommand):
             )
             project.topics.set(topics[slug] for slug in topic_slugs)
 
+        # Keep demo content in the same nested taxonomy used by imported notes.
+        # The data migration creates these rows too; update_or_create keeps this
+        # command idempotent for databases created before or after that migration.
+        ai_category, _ = Category.objects.update_or_create(
+            slug="ai-technology",
+            defaults={"name": "AI 技术", "sort_order": 10},
+        )
+        model_category, _ = Category.objects.update_or_create(
+            slug="large-models",
+            defaults={"name": "大模型", "parent": ai_category, "sort_order": 10},
+        )
+        inference_category, _ = Category.objects.update_or_create(
+            slug="inference-optimization",
+            defaults={
+                "name": "推理优化",
+                "parent": model_category,
+                "sort_order": 10,
+            },
+        )
         category, _ = Category.objects.update_or_create(
-            slug="learning-notes",
-            defaults={"name": "学习笔记", "description": "大模型推理优化学习记录"},
+            slug="notes",
+            defaults={
+                "name": "学习笔记",
+                "description": "大模型推理优化学习记录",
+                "parent": inference_category,
+                "sort_order": 10,
+            },
         )
         article_specs = (
             (
@@ -149,11 +173,17 @@ class Command(BaseCommand):
         source_specs = (
             ("arxiv", "arXiv API", "https://arxiv.org/", "paper"),
             ("huggingface", "Hugging Face", "https://huggingface.co/", "model"),
-            ("github", "GitHub Trending", "https://github.com/", "repository"),
+            (
+                "github",
+                "GitHub 热门项目",
+                "https://github.com/search?q=llm&type=repositories",
+                "repository",
+            ),
+            ("deepseek", "DeepSeek AI Search", "https://api.deepseek.com/", "article"),
             ("openreview", "OpenReview", "https://openreview.net/", "paper"),
         )
         for index, (source_type, name, url, kind) in enumerate(source_specs):
-            source, _ = RadarSource.objects.update_or_create(
+            source, created = RadarSource.objects.get_or_create(
                 source_type=source_type,
                 defaults={
                     "name": name,
@@ -162,6 +192,10 @@ class Command(BaseCommand):
                     "status": RadarSource.Status.DISABLED,
                 },
             )
+            if not created and (source.name != name or source.homepage_url != url):
+                source.name = name
+                source.homepage_url = url
+                source.save(update_fields=("name", "homepage_url", "updated_at"))
             item, _ = RadarItem.objects.update_or_create(
                 source=source,
                 external_id=f"sample-{source_type}-001",

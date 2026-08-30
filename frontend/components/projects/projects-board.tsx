@@ -19,6 +19,59 @@ const filters = [
   { value: 'learning', label: '学习实验' },
 ];
 
+function formatSyncTime(value?: string | null) {
+  if (!value) return '尚未记录';
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) return '时间未知';
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Shanghai',
+  }).format(timestamp);
+}
+
+function ProjectTags({ project }: { project: Project }) {
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {project.topics.map((topic) => <span className="tag-chip" key={topic.slug}>{topic.name}</span>)}
+      {!project.is_demo && project.source_metadata?.language && <span className="tag-chip">{project.source_metadata.language}</span>}
+      {!project.is_demo && project.source_metadata?.license && <span className="tag-chip">{project.source_metadata.license}</span>}
+    </div>
+  );
+}
+
+function RepositoryFacts({ project }: { project: Project }) {
+  const metadata = project.source_metadata ?? {};
+  const facts = [
+    ['语言', metadata.language || '未标注'],
+    ['Stars', String(metadata.stars ?? 0)],
+    ['Forks', String(metadata.forks ?? 0)],
+    ['Issues', String(metadata.open_issues ?? 0)],
+    ['默认分支', metadata.default_branch || '未标注'],
+    ['许可证', metadata.license || '未标注'],
+  ];
+  return (
+    <dl className="grid grid-cols-2 gap-2 text-xs">
+      {facts.map(([label, value]) => (
+        <div className="rounded-lg border border-line bg-white/75 p-3" key={label}>
+          <dt className="text-muted-ink">{label}</dt>
+          <dd className="mt-1 truncate font-bold">{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function ProjectBadge({ project }: { project: Project }) {
+  if (project.is_demo) return <span className="demo-badge">概念项目 / DEMO</span>;
+  if (project.external_source === 'github') return <span className="tag-chip text-success">GitHub 同步 / LIVE</span>;
+  return <span className="tag-chip text-success">正式项目</span>;
+}
+
 export function ProjectsBoard({ projects }: { projects: Project[] }) {
   const [active, setActive] = useState('all');
   const visible = useMemo(
@@ -44,21 +97,19 @@ export function ProjectsBoard({ projects }: { projects: Project[] }) {
         ))}
       </div>
 
-      {featured ? (
+      {featured ? featured.is_demo ? (
         <section className="project-feature" aria-label={featured.title}>
           <div className="project-copy">
             <div className="flex flex-wrap items-center gap-3">
               <h2 className="text-2xl font-black tracking-tight">{featured.title}</h2>
-              {featured.is_demo && <span className="demo-badge">概念项目 / DEMO</span>}
+              <ProjectBadge project={featured} />
             </div>
             <p className="mt-1 text-sm font-medium">{featured.subtitle}</p>
             <dl className="mt-5 space-y-4 text-xs leading-6">
               <div><dt className="font-bold">研究问题</dt><dd className="text-muted-ink">{featured.problem}</dd></div>
               <div><dt className="font-bold">设计思路</dt><dd className="text-muted-ink">{featured.approach}</dd></div>
             </dl>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {featured.topics.map((topic) => <span className="tag-chip" key={topic.slug}>{topic.name}</span>)}
-            </div>
+            <ProjectTags project={featured} />
             <a className="primary-action mt-4 h-10" href={featured.repository_url} rel="noreferrer" target="_blank">
               查看案例 <SiteIcon name="arrow" />
             </a>
@@ -74,6 +125,28 @@ export function ProjectsBoard({ projects }: { projects: Project[] }) {
           </div>
         </section>
       ) : (
+        <section className="project-feature" aria-label={featured.title}>
+          <div className="project-copy">
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="text-2xl font-black tracking-tight">{featured.title}</h2>
+              <ProjectBadge project={featured} />
+            </div>
+            <p className="mt-1 text-sm font-medium">{featured.subtitle}</p>
+            <p className="mt-5 text-xs leading-6 text-muted-ink">{featured.summary || '该仓库暂未提供简介。'}</p>
+            <ProjectTags project={featured} />
+            {featured.repository_url && <a className="primary-action mt-4 h-10" href={featured.repository_url} rel="noreferrer" target="_blank">查看仓库 <SiteIcon name="external" /></a>}
+          </div>
+          <div className="project-visual border-l border-line p-6">
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-brand">Repository Metadata</p>
+            <h3 className="mt-2 text-lg font-black">{featured.source_metadata?.full_name || featured.title}</h3>
+            <p className="mt-3 text-xs leading-6 text-muted-ink">数据来自 GitHub 官方 API；这里只展示仓库公开元数据，不生成虚假的实验结论或性能曲线。</p>
+            <p className="mt-5 text-[11px] text-muted-ink">最后同步：{formatSyncTime(featured.last_synced_at)}</p>
+          </div>
+          <div className="project-visual border-l border-line p-6">
+            <RepositoryFacts project={featured} />
+          </div>
+        </section>
+      ) : (
         <div className="empty-state">该分类暂时没有公开项目。</div>
       )}
 
@@ -81,20 +154,25 @@ export function ProjectsBoard({ projects }: { projects: Project[] }) {
         <div className="mt-3 grid gap-3 lg:grid-cols-2">
           {rest.map((project) => (
             <article className="project-secondary" key={project.slug}>
-              <div className="w-full lg:w-[43%]">
-                <div className="flex items-center gap-3">
+              <div className="w-full lg:w-[48%]">
+                <div className="flex flex-wrap items-center gap-3">
                   <h2 className="text-xl font-black">{project.title}</h2>
+                  <ProjectBadge project={project} />
                 </div>
                 <p className="mt-1 text-sm font-semibold">{project.subtitle}</p>
-                <dl className="mt-4 space-y-3 text-xs leading-6">
-                  <div><dt className="font-bold">研究问题</dt><dd className="text-muted-ink">{project.problem}</dd></div>
-                  <div><dt className="font-bold">设计思路</dt><dd className="text-muted-ink">{project.approach}</dd></div>
-                </dl>
-                <div className="mt-3 flex flex-wrap gap-2">{project.topics.map((topic) => <span className="tag-chip" key={topic.slug}>{topic.name}</span>)}</div>
+                {project.is_demo ? (
+                  <dl className="mt-4 space-y-3 text-xs leading-6">
+                    <div><dt className="font-bold">研究问题</dt><dd className="text-muted-ink">{project.problem}</dd></div>
+                    <div><dt className="font-bold">设计思路</dt><dd className="text-muted-ink">{project.approach}</dd></div>
+                  </dl>
+                ) : <p className="mt-4 text-xs leading-6 text-muted-ink">{project.summary || '该仓库暂未提供简介。'}</p>}
+                <ProjectTags project={project} />
+                {!project.is_demo && project.repository_url && <a className="secondary-action mt-4 h-9" href={project.repository_url} rel="noreferrer" target="_blank">查看仓库 <SiteIcon name="external" /></a>}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="mb-1 flex justify-end"><span className="demo-badge">概念项目 / DEMO</span></div>
-                {project.category === 'system' ? <><KvCacheMatrix /><div className="memory-timeline"><span /><span /><span /></div></> : <ServingTopology />}
+                {project.is_demo ? (
+                  project.category === 'system' ? <><KvCacheMatrix /><div className="memory-timeline"><span /><span /><span /></div></> : <ServingTopology />
+                ) : <><RepositoryFacts project={project} /><p className="mt-3 text-[11px] text-muted-ink">最后同步：{formatSyncTime(project.last_synced_at)}</p></>}
               </div>
             </article>
           ))}

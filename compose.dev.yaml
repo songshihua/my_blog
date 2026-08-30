@@ -16,6 +16,7 @@ services:
       - ./backend:/app/backend
       - ./data/static:/app/data/static
       - ./data/media:/app/data/media
+      - ./data/notes:/app/data/notes
 
   frontend:
     command: npm run dev -- --host 0.0.0.0

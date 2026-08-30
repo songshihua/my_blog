@@ -1,3 +1,4 @@
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -10,6 +11,7 @@ from apps.portfolio.serializers import ProjectListSerializer
 from apps.radar.models import RadarItem
 from apps.radar.serializers import RadarItemListSerializer
 
+from .api_serializers import HomeResponseSerializer
 from .models import SiteProfile, Topic
 from .serializers import SiteProfileSerializer, TopicSerializer
 
@@ -29,6 +31,12 @@ class TopicViewSet(PublicReadOnlyMixin, ReadOnlyModelViewSet):
 class ProfileAPIView(APIView):
     permission_classes = (AllowAny,)
 
+    @extend_schema(
+        responses={
+            200: SiteProfileSerializer,
+            404: OpenApiResponse(description="The public profile is not configured."),
+        }
+    )
     def get(self, _request):
         profile = SiteProfile.objects.filter(is_active=True).first()
         if profile is None:
@@ -41,6 +49,7 @@ class HomeAPIView(APIView):
 
     permission_classes = (AllowAny,)
 
+    @extend_schema(responses=HomeResponseSerializer)
     def get(self, _request):
         profile = SiteProfile.objects.filter(is_active=True).first()
         projects = Project.objects.filter(is_published=True, is_featured=True)[:3]

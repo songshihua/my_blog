@@ -14,7 +14,8 @@ def topic(db):
 
 @pytest.fixture
 def category(db):
-    return Category.objects.create(name="学习笔记", slug="notes")
+    category, _ = Category.objects.get_or_create(name="学习笔记", slug="notes")
+    return category
 
 
 @pytest.fixture

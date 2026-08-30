@@ -33,6 +33,16 @@ def env_list(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
+def env_int(name: str, default: int, minimum: int = 1, maximum: int = 100) -> int:
+    """Read and clamp an integer so remote-provider settings stay bounded."""
+
+    try:
+        value = int(os.getenv(name, str(default)))
+    except ValueError:
+        value = default
+    return max(minimum, min(value, maximum))
+
+
 def required_env(name: str) -> str:
     value = os.getenv(name)
     if not value:
@@ -129,6 +139,22 @@ STATIC_ROOT = REPOSITORY_DIR / "data" / "static"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = REPOSITORY_DIR / "data" / "media"
 
+# Original note documents are private application data. They deliberately live
+# outside MEDIA_ROOT and can only be downloaded through the bounded API action.
+NOTE_UPLOAD_ROOT = Path(
+    os.getenv("NOTE_UPLOAD_ROOT", str(REPOSITORY_DIR / "data" / "notes"))
+).resolve()
+NOTE_UPLOAD_MAX_BYTES = env_int(
+    "NOTE_UPLOAD_MAX_BYTES",
+    8 * 1024 * 1024,
+    minimum=1024,
+    maximum=10 * 1024 * 1024,
+)
+NOTE_BROWSER_IMPORT_ENABLED = False
+DATA_UPLOAD_MAX_MEMORY_SIZE = NOTE_UPLOAD_MAX_BYTES + (512 * 1024)
+FILE_UPLOAD_MAX_MEMORY_SIZE = NOTE_UPLOAD_MAX_BYTES
+DATA_UPLOAD_MAX_NUMBER_FILES = 1
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {
@@ -177,3 +203,55 @@ LOGGING = {
     },
     "root": {"handlers": ["console"], "level": os.getenv("DJANGO_LOG_LEVEL", "INFO")},
 }
+
+# External integrations are invoked only by backend management commands. Tokens
+# must never be exposed through NEXT_PUBLIC_* variables or serialized API output.
+EXTERNAL_HTTP_USER_AGENT = os.getenv(
+    "EXTERNAL_HTTP_USER_AGENT", "SS-LAB-Radar/1.0 (+https://github.com/songshihua)"
+)
+EXTERNAL_HTTP_TIMEOUT_SECONDS = env_int(
+    "EXTERNAL_HTTP_TIMEOUT_SECONDS", 30, minimum=5, maximum=180
+)
+RADAR_SYNC_LIMIT = env_int("RADAR_SYNC_LIMIT", 20, minimum=1, maximum=100)
+RADAR_BROWSER_SYNC_ENABLED = False
+RADAR_BROWSER_SYNC_COOLDOWN_SECONDS = env_int(
+    "RADAR_BROWSER_SYNC_COOLDOWN_SECONDS", 30, minimum=5, maximum=3600
+)
+
+ARXIV_SEARCH_QUERY = os.getenv("ARXIV_SEARCH_QUERY", "").strip()
+
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "").strip()
+GITHUB_API_VERSION = os.getenv("GITHUB_API_VERSION", "2026-03-10").strip()
+GITHUB_DISCOVERY_QUERY = os.getenv("GITHUB_DISCOVERY_QUERY", "llm").strip()
+GITHUB_DISCOVERY_LOOKBACK_DAYS = env_int(
+    "GITHUB_DISCOVERY_LOOKBACK_DAYS", 30, minimum=1, maximum=365
+)
+GITHUB_DISCOVERY_MIN_STARS = env_int(
+    "GITHUB_DISCOVERY_MIN_STARS", 20, minimum=0, maximum=1_000_000
+)
+GITHUB_DISCOVERY_SORT = os.getenv("GITHUB_DISCOVERY_SORT", "stars").strip().lower()
+
+HUGGINGFACE_AUTHOR = os.getenv("HUGGINGFACE_AUTHOR", "").strip()
+HUGGINGFACE_SEARCH = os.getenv("HUGGINGFACE_SEARCH", "").strip()
+HUGGINGFACE_TOKEN = os.getenv("HUGGINGFACE_TOKEN", "").strip()
+HUGGINGFACE_INCLUDE_DATASETS = env_bool("HUGGINGFACE_INCLUDE_DATASETS", True)
+
+LLM_API_KEY = os.getenv("LLM_API_KEY", "").strip()
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com").rstrip("/")
+LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-v4-pro").strip()
+LLM_FALLBACK_MODEL = os.getenv("LLM_FALLBACK_MODEL", "deepseek-v4-flash").strip()
+LLM_LOOKBACK_DAYS = env_int("LLM_LOOKBACK_DAYS", 7, minimum=1, maximum=30)
+LLM_REASONING_EFFORT = os.getenv("LLM_REASONING_EFFORT", "low").strip()
+LLM_VERIFY_SOURCE_URLS = env_bool("LLM_VERIFY_SOURCE_URLS", True)
+AI_RADAR_KEYWORDS = env_list(
+    "AI_RADAR_KEYWORDS",
+    "speculative decoding,KV Cache,LLM serving,inference optimization,long context",
+)
+AI_RADAR_ALLOWED_DOMAINS = env_list(
+    "AI_RADAR_ALLOWED_DOMAINS",
+    (
+        "arxiv.org,openreview.net,huggingface.co,github.com,pytorch.org,nvidia.com,"
+        "research.google,deepmind.google,ai.meta.com,microsoft.com,openai.com,"
+        "anthropic.com"
+    ),
+)
