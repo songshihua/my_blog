@@ -23,6 +23,9 @@ class ProjectListSerializer(serializers.ModelSerializer):
             "demo_url",
             "is_featured",
             "is_demo",
+            "external_source",
+            "source_metadata",
+            "last_synced_at",
             "updated_at",
         )
 

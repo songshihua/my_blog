@@ -1,20 +1,45 @@
 from datetime import timedelta
 
+from django.conf import settings
 from django.db.models import Count
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import extend_schema
 from rest_framework.filters import OrderingFilter, SearchFilter
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, BasePermission
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
-from .models import RadarItem, RadarSource
+from .models import IngestionRun, RadarItem, RadarSource
 from .serializers import (
     RadarItemDetailSerializer,
     RadarItemListSerializer,
     RadarSourceSerializer,
+    RadarStatsSerializer,
+    RadarSyncErrorSerializer,
+    RadarSyncResponseSerializer,
 )
+from .services import RadarSyncAlreadyRunning, synchronize_source_types
+
+BROWSER_SYNC_SOURCE_TYPES = (
+    RadarSource.SourceType.ARXIV,
+    RadarSource.SourceType.GITHUB,
+    RadarSource.SourceType.HUGGINGFACE,
+)
+
+
+class CanUseLocalRadarSync(BasePermission):
+    """Permit the mutation only from the trusted local frontend in development."""
+
+    message = "前端同步仅在受信任的本地开发环境中开放。"
+
+    def has_permission(self, request, _view) -> bool:
+        if not settings.DEBUG or not settings.RADAR_BROWSER_SYNC_ENABLED:
+            return False
+        if request.META.get("REMOTE_ADDR") not in {"127.0.0.1", "::1"}:
+            return False
+        return request.headers.get("Origin", "") in set(settings.CORS_ALLOWED_ORIGINS)
 
 
 class RadarSourceViewSet(ReadOnlyModelViewSet):
@@ -36,7 +61,12 @@ class RadarItemViewSet(ReadOnlyModelViewSet):
     ordering = ("-published_at",)
 
     def get_queryset(self):
-        queryset = RadarItem.objects.visible().select_related("source").prefetch_related("topics")
+        queryset = (
+            RadarItem.objects.visible()
+            .filter(is_demo=False)
+            .select_related("source")
+            .prefetch_related("topics")
+        )
         since = self.request.query_params.get("since")
         if since:
             queryset = queryset.filter(published_at__date__gte=since)
@@ -51,11 +81,12 @@ class RadarItemViewSet(ReadOnlyModelViewSet):
 class RadarStatsAPIView(APIView):
     permission_classes = (AllowAny,)
 
+    @extend_schema(responses=RadarStatsSerializer)
     def get(self, _request):
         now = timezone.now()
         today = now.date()
         week_start = now - timedelta(days=7)
-        items = RadarItem.objects.visible()
+        items = RadarItem.objects.visible().filter(is_demo=False)
         by_kind = dict(items.values_list("kind").annotate(total=Count("id")))
         last_success = (
             RadarSource.objects.exclude(last_success_at=None)
@@ -71,5 +102,93 @@ class RadarStatsAPIView(APIView):
                 "by_kind": by_kind,
                 "last_success_at": last_success,
                 "contains_demo_data": items.filter(is_demo=True).exists(),
+            }
+        )
+
+
+class RadarSyncAPIView(APIView):
+    """Synchronously refresh the three sources exposed by the local frontend."""
+
+    authentication_classes = ()
+    permission_classes = (CanUseLocalRadarSync,)
+
+    @extend_schema(
+        request=None,
+        responses={
+            200: RadarSyncResponseSerializer,
+            403: RadarSyncErrorSerializer,
+            409: RadarSyncErrorSerializer,
+            429: RadarSyncErrorSerializer,
+        },
+    )
+    def post(self, _request):
+        cooldown = settings.RADAR_BROWSER_SYNC_COOLDOWN_SECONDS
+        latest_attempt = (
+            RadarSource.objects.filter(source_type__in=BROWSER_SYNC_SOURCE_TYPES)
+            .exclude(last_attempt_at=None)
+            .order_by("-last_attempt_at")
+            .values_list("last_attempt_at", flat=True)
+            .first()
+        )
+        if latest_attempt is not None:
+            elapsed = (timezone.now() - latest_attempt).total_seconds()
+            if elapsed < cooldown:
+                retry_after = max(1, int(cooldown - elapsed) + 1)
+                return Response(
+                    {
+                        "detail": f"同步操作过于频繁，请在 {retry_after} 秒后重试。",
+                        "retry_after": retry_after,
+                    },
+                    status=429,
+                )
+
+        try:
+            results = synchronize_source_types(
+                BROWSER_SYNC_SOURCE_TYPES,
+                limit=min(settings.RADAR_SYNC_LIMIT, 20),
+            )
+        except RadarSyncAlreadyRunning:
+            return Response(
+                {"detail": "已有同步任务正在运行，请稍后再试。"},
+                status=409,
+            )
+
+        serialized_results = [
+            {
+                "source_type": result.source_type,
+                "name": result.name,
+                "status": result.outcome.status,
+                "inserted": result.outcome.inserted,
+                "updated": result.outcome.updated,
+                "skipped": result.outcome.skipped,
+                "message": result.outcome.message,
+            }
+            for result in results
+        ]
+        inserted = sum(result.outcome.inserted for result in results)
+        updated = sum(result.outcome.updated for result in results)
+        skipped = sum(result.outcome.skipped for result in results)
+        succeeded = sum(result.outcome.status == IngestionRun.Status.SUCCESS for result in results)
+        failed = sum(result.outcome.status == IngestionRun.Status.FAILED for result in results)
+        not_run = len(results) - succeeded - failed
+
+        if succeeded == len(results) and results:
+            sync_status = "success"
+            message = f"同步完成：新增 {inserted} 条，更新 {updated} 条。"
+        elif succeeded:
+            sync_status = "partial"
+            message = f"同步部分完成：{succeeded} 个成功，{failed + not_run} 个未完成。"
+        else:
+            sync_status = "error"
+            message = "没有数据源同步成功，请检查数据源配置或稍后重试。"
+
+        return Response(
+            {
+                "status": sync_status,
+                "message": message,
+                "inserted": inserted,
+                "updated": updated,
+                "skipped": skipped,
+                "results": serialized_results,
             }
         )

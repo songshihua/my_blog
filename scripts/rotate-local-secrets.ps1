@@ -1,5 +1,7 @@
 [CmdletBinding()]
-param()
+param(
+    [switch]$RecoverFromContainer
+)
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -30,13 +32,15 @@ function Get-EnvironmentValue {
         [Parameter(Mandatory)][string]$Name
     )
 
-    $pattern = '(?m)^' + [Regex]::Escape($Name) + '=(.*)$'
-    $match = [Regex]::Match($Text, $pattern)
-    if (-not $match.Success) {
+    $prefix = "$Name="
+    $line = [Regex]::Split($Text, '\r?\n') |
+        Where-Object { $_.StartsWith($prefix) } |
+        Select-Object -First 1
+    if ($null -eq $line) {
         throw "Missing $Name in .env."
     }
 
-    return $match.Groups[1].Value.Trim()
+    return $line.Substring($prefix.Length).Trim()
 }
 
 function Set-EnvironmentValue {
@@ -50,10 +54,40 @@ function Set-EnvironmentValue {
     return [Regex]::Replace($Text, $pattern, "$Name=$Value")
 }
 
-$environmentText = Get-Content -LiteralPath '.env' -Raw
+$environmentText = [System.IO.File]::ReadAllText(
+    (Join-Path $projectRoot '.env'),
+    [System.Text.Encoding]::UTF8
+)
 $databaseUser = Get-EnvironmentValue -Text $environmentText -Name 'MYSQL_USER'
-$currentRootPassword = Get-EnvironmentValue -Text $environmentText -Name 'MYSQL_ROOT_PASSWORD'
 
+# A running container is mandatory. Rotating only .env would make its password
+# diverge from the existing MySQL data volume and lock the application out.
+$containerId = [string](& docker compose -f compose.yaml -f compose.dev.yaml ps -q db)
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($containerId)) {
+    throw 'The MySQL container must be running before rotation. Start it or use recover-mysql-access.ps1.'
+}
+
+$containerEnvironmentJson = & docker inspect --format '{{json .Config.Env}}' $containerId
+if ($LASTEXITCODE -ne 0) {
+    throw 'Unable to inspect the running MySQL container.'
+}
+$containerValues = @{}
+foreach ($entry in ($containerEnvironmentJson | ConvertFrom-Json)) {
+    $parts = [string]$entry -split '=', 2
+    if ($parts.Count -eq 2) {
+        $containerValues[$parts[0]] = $parts[1]
+    }
+}
+if (-not $containerValues.ContainsKey('MYSQL_ROOT_PASSWORD') -or
+    -not $containerValues.ContainsKey('MYSQL_USER')) {
+    throw 'The running container does not contain the expected MySQL account settings.'
+}
+if ($RecoverFromContainer) {
+    $databaseUser = [string]$containerValues['MYSQL_USER']
+}
+elseif ($databaseUser -ne [string]$containerValues['MYSQL_USER']) {
+    throw 'MYSQL_USER differs from the running container. Retry with -RecoverFromContainer after inspection.'
+}
 if ($databaseUser -notmatch '^[A-Za-z0-9_]+$') {
     throw 'MYSQL_USER contains unsupported characters.'
 }
@@ -61,24 +95,14 @@ if ($databaseUser -notmatch '^[A-Za-z0-9_]+$') {
 $newDjangoSecret = New-UrlSafeSecret -ByteCount 64
 $newDatabasePassword = New-UrlSafeSecret -ByteCount 32
 $newRootPassword = New-UrlSafeSecret -ByteCount 32
+$sql = "ALTER USER '$databaseUser'@'%' IDENTIFIED BY '$newDatabasePassword'; ALTER USER 'root'@'localhost' IDENTIFIED BY '$newRootPassword';"
 
-$containerId = [string](& docker compose -f compose.yaml -f compose.dev.yaml ps -q db)
+# The old password comes from the container environment and the new passwords
+# travel through standard input. No credential is placed in a process argument.
+$sql | & docker compose -f compose.yaml -f compose.dev.yaml exec -T db `
+    sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -uroot'
 if ($LASTEXITCODE -ne 0) {
-    throw 'Unable to inspect the MySQL container.'
-}
-
-if (-not [string]::IsNullOrWhiteSpace($containerId)) {
-    # Secrets are URL-safe random strings, so quoting them as SQL string literals is safe.
-    $sql = "ALTER USER '$databaseUser'@'%' IDENTIFIED BY '$newDatabasePassword'; ALTER USER 'root'@'localhost' IDENTIFIED BY '$newRootPassword';"
-    $mysqlArguments = @(
-        'compose', '-f', 'compose.yaml', '-f', 'compose.dev.yaml',
-        'exec', '-T', '-e', "MYSQL_PWD=$currentRootPassword",
-        'db', 'mysql', '-uroot', '-e', $sql
-    )
-    & docker @mysqlArguments
-    if ($LASTEXITCODE -ne 0) {
-        throw 'MySQL rejected the credential rotation; .env was not changed.'
-    }
+    throw 'MySQL rejected the credential rotation; .env was not changed.'
 }
 
 $environmentText = Set-EnvironmentValue -Text $environmentText -Name 'DJANGO_SECRET_KEY' -Value $newDjangoSecret
@@ -86,14 +110,16 @@ $environmentText = Set-EnvironmentValue -Text $environmentText -Name 'MYSQL_PASS
 $environmentText = Set-EnvironmentValue -Text $environmentText -Name 'MYSQL_ROOT_PASSWORD' -Value $newRootPassword
 
 $temporaryPath = Join-Path $projectRoot '.env.rotate.tmp'
-[System.IO.File]::WriteAllText($temporaryPath, $environmentText, [System.Text.UTF8Encoding]::new($false))
+[System.IO.File]::WriteAllText(
+    $temporaryPath,
+    $environmentText,
+    [System.Text.UTF8Encoding]::new($false)
+)
 Move-Item -LiteralPath $temporaryPath -Destination (Join-Path $projectRoot '.env') -Force
 
-if (-not [string]::IsNullOrWhiteSpace($containerId)) {
-    & docker compose -f compose.yaml -f compose.dev.yaml up -d --force-recreate --wait db
-    if ($LASTEXITCODE -ne 0) {
-        throw 'Secrets were rotated, but the MySQL container failed to restart. Inspect docker compose logs db.'
-    }
+& docker compose -f compose.yaml -f compose.dev.yaml up -d --force-recreate --wait db
+if ($LASTEXITCODE -ne 0) {
+    throw 'Credentials were rotated and .env matches MySQL, but the container failed to restart.'
 }
 
 Write-Host 'Local Django and MySQL secrets were rotated successfully.' -ForegroundColor Green

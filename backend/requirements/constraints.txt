@@ -7,8 +7,12 @@ drf-spectacular==0.28.0
 mysqlclient==2.2.8
 Pillow==12.3.0
 httpx==0.28.1
+huggingface-hub==1.28.0
 feedparser==6.0.14
 python-dotenv==1.2.3
+python-docx==1.2.0
+pypdf==6.16.2
+lxml==6.1.2
 gunicorn==23.0.0
 pytest==8.4.2
 pytest-django==4.14.0

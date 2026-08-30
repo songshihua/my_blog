@@ -10,6 +10,10 @@ class Project(TimeStampedModel):
         TOOL = "tool", "工具"
         LEARNING = "learning", "学习实验"
 
+    class ExternalSource(models.TextChoices):
+        MANUAL = "manual", "手工维护"
+        GITHUB = "github", "GitHub"
+
     title = models.CharField("标题", max_length=160)
     slug = models.SlugField("标识", max_length=180, unique=True)
     subtitle = models.CharField("副标题", max_length=200, blank=True)
@@ -30,9 +34,27 @@ class Project(TimeStampedModel):
     sort_order = models.PositiveIntegerField("排序", default=0)
     started_at = models.DateField("开始日期", blank=True, null=True)
     ended_at = models.DateField("结束日期", blank=True, null=True)
+    external_source = models.CharField(
+        "外部来源",
+        max_length=24,
+        choices=ExternalSource.choices,
+        default=ExternalSource.MANUAL,
+    )
+    # NULL lets MySQL keep multiple manual projects while enforcing unique provider IDs.
+    external_id = models.CharField(  # noqa: DJ001
+        "外部 ID", max_length=100, blank=True, null=True
+    )
+    source_metadata = models.JSONField("来源元数据", default=dict, blank=True)
+    last_synced_at = models.DateTimeField("最后同步时间", blank=True, null=True)
 
     class Meta:
         ordering = ("sort_order", "-updated_at")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("external_source", "external_id"),
+                name="portfolio_unique_external_project",
+            )
+        ]
         indexes = [models.Index(fields=("is_published", "is_featured", "sort_order"))]
         verbose_name = "项目"
         verbose_name_plural = "项目"

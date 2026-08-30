@@ -18,7 +18,7 @@ RUN pip install --no-cache-dir -r /tmp/requirements/production.txt
 COPY backend/ ./
 
 RUN useradd --create-home --uid 10001 app \
-    && mkdir -p /app/data/static /app/data/media \
+    && mkdir -p /app/data/static /app/data/media /app/data/notes \
     && chown -R app:app /app
 
 USER app

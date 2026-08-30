@@ -19,12 +19,15 @@ frontend/node_modules/
 frontend/.next/
 frontend/dist/
 frontend/.wrangler/
+frontend/tsconfig.tsbuildinfo
 
 # Runtime data
 data/static/*
 !data/static/.gitkeep
 data/media/*
 !data/media/.gitkeep
+data/notes/*
+!data/notes/.gitkeep
 backups/*
 !backups/.gitkeep
 *.sqlite3

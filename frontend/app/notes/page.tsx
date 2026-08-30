@@ -1,45 +1,164 @@
 import type { Metadata } from 'next';
+import { FileText, FolderTree, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 
 import { SiteFooter } from '@/components/layout/site-footer';
 import { SiteHeader } from '@/components/layout/site-header';
-import { SiteIcon } from '@/components/ui/site-icon';
-import { getArticles } from '@/lib/api';
+import { NoteTreeNav } from '@/components/notes/note-tree';
+import { getNoteTree } from '@/lib/api';
 
 export const metadata: Metadata = {
   title: '技术笔记',
-  description: '大模型推理优化、投机解码、KV Cache 与服务系统学习笔记。',
+  description: '按主题分层整理的研究与开发笔记知识库。',
 };
 
+function formatDate(value: string | null) {
+  if (!value) return '尚未发布';
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(value));
+}
+
 export default async function NotesPage() {
-  const articles = await getArticles();
+  const tree = await getNoteTree();
+  const recentArticles = [...tree.articles]
+    .sort((left, right) =>
+      (right.published_at ?? '').localeCompare(left.published_at ?? ''),
+    )
+    .slice(0, 12);
+  const formats = new Set(
+    tree.articles
+      .map((article) => article.source_file?.source_format_label)
+      .filter((value): value is string => Boolean(value)),
+  );
 
   return (
     <main className="min-h-screen bg-paper text-ink">
       <SiteHeader activePath="/notes" />
-      <div className="site-shell py-10">
-        <header className="max-w-3xl">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand">Research Notes</p>
-          <h1 className="mt-2 text-[clamp(2.2rem,4vw,3.8rem)] font-black tracking-tight">技术笔记与学习记录</h1>
-          <p className="mt-3 leading-7 text-muted-ink">把论文理解、实验设计和工程复盘沉淀成可以检索、复用和持续修订的研究资料。</p>
-        </header>
-        <div className="mt-8 grid gap-4 lg:grid-cols-[minmax(0,1fr)_310px]">
-          <section className="space-y-3" aria-label="文章列表">
-            {articles.map((article, index) => (
-              <Link className="note-card" href={`/notes/${article.slug}`} key={article.slug}>
-                <div className="flex items-center gap-2 text-xs text-muted-ink"><span className="demo-badge">SAMPLE</span><time dateTime={article.published_at}>{article.published_at.slice(0, 10)}</time><span>·</span><span>约 {article.reading_minutes} 分钟</span></div>
-                <h2 className="mt-3 text-xl font-black tracking-tight">{article.title}</h2>
-                <p className="mt-2 text-sm leading-7 text-muted-ink">{article.summary}</p>
-                <div className="mt-4 flex items-center gap-2">{article.topics.map((topic) => <span className="tag-chip" key={topic.slug}>{topic.name}</span>)}<SiteIcon className="ml-auto size-5 text-brand" name="arrow" /></div>
-                <span className="absolute right-5 top-4 text-5xl font-black text-brand-soft/55">0{index + 1}</span>
-              </Link>
-            ))}
-          </section>
-          <aside className="space-y-3">
-            <section className="side-card"><h2>笔记主题</h2>{['投机解码', 'KV Cache', 'LLM Serving', '系统设计'].map((item) => <div className="overview-row" key={item}><span className="size-2 rounded-full bg-brand" /><span className="flex-1">{item}</span><span>›</span></div>)}</section>
-            <section className="side-card"><h2>内容说明</h2><p className="text-xs leading-6 text-muted-ink">当前文章用于验证本地开发、API 和排版。所有示意曲线、指标与论文条目均明确标记，不作为真实研究成果。</p></section>
-          </aside>
-        </div>
+      <div className="notes-workspace notes-workspace-index">
+        <aside className="notes-library-pane">
+          <NoteTreeNav tree={tree} />
+        </aside>
+
+        <section className="notes-index-pane">
+          <header className="notes-index-header">
+            <div>
+              <span>RESEARCH NOTES</span>
+              <h1>技术笔记知识库</h1>
+              <p>
+                像目录一样逐层归档内容，从分类进入文章，也可以在左侧直接导入自己的笔记。
+              </p>
+            </div>
+            <div
+              className="notes-index-count"
+              aria-label={`共 ${tree.articles.length} 篇笔记`}
+            >
+              <strong>{tree.articles.length}</strong>
+              <span>篇笔记</span>
+            </div>
+          </header>
+
+          <div className="notes-section-heading">
+            <div>
+              <h2>最近更新</h2>
+              <p>导入完成后，笔记会立即出现在所属分类和这里。</p>
+            </div>
+          </div>
+
+          {recentArticles.length ? (
+            <div className="notes-index-list">
+              {recentArticles.map((article) => {
+                const categoryPath = [
+                  ...article.category.ancestors,
+                  article.category,
+                ]
+                  .map((category) => category.name)
+                  .join(' / ');
+                return (
+                  <Link
+                    className="note-index-card group"
+                    href={`/notes/${article.slug}`}
+                    key={article.slug}
+                  >
+                    <div className="note-index-icon">
+                      <FileText aria-hidden="true" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="note-index-path">{categoryPath}</span>
+                        {article.source_file ? (
+                          <span className="note-format-badge">
+                            {article.source_file.source_format_label}
+                          </span>
+                        ) : (
+                          article.is_demo && (
+                            <span className="demo-badge">示例</span>
+                          )
+                        )}
+                      </div>
+                      <h3>{article.title}</h3>
+                      <p>{article.summary}</p>
+                      <div className="note-index-meta">
+                        <time dateTime={article.published_at ?? undefined}>
+                          {formatDate(article.published_at)}
+                        </time>
+                        <span>{article.reading_minutes} 分钟阅读</span>
+                      </div>
+                    </div>
+                    <span className="note-index-arrow" aria-hidden="true">
+                      →
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="empty-state">
+              <FileText
+                className="mx-auto mb-3 size-8 text-brand"
+                aria-hidden="true"
+              />
+              还没有笔记。请先在左侧选择“添加笔记”。
+            </div>
+          )}
+        </section>
+
+        <aside className="notes-info-pane">
+          <div className="notes-info-sticky">
+            <section className="side-card">
+              <FolderTree aria-hidden="true" className="notes-info-icon" />
+              <h2>分层管理</h2>
+              <p>
+                当前共有 {tree.categories.length}{' '}
+                个分类节点。文章沿父子分类逐层展开，适合持续积累专题知识。
+              </p>
+            </section>
+            <section className="side-card">
+              <ShieldCheck aria-hidden="true" className="notes-info-icon" />
+              <h2>本地文件</h2>
+              <p>
+                原文件保存在项目的 <code>data/notes</code>{' '}
+                目录，不会作为公开媒体文件直接暴露。
+              </p>
+              <dl className="notes-facts">
+                <div>
+                  <dt>支持格式</dt>
+                  <dd>MD / DOCX / PDF</dd>
+                </div>
+                <div>
+                  <dt>已导入格式</dt>
+                  <dd>{formats.size ? [...formats].join(' / ') : '暂无'}</dd>
+                </div>
+                <div>
+                  <dt>单文件上限</dt>
+                  <dd>8 MB</dd>
+                </div>
+              </dl>
+            </section>
+          </div>
+        </aside>
       </div>
       <SiteFooter />
     </main>

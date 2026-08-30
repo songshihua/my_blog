@@ -52,6 +52,7 @@ services:
     volumes:
       - static_data:/app/data/static
       - media_data:/app/data/media
+      - notes_data:/app/data/notes
     networks:
       - backend
       - frontend
@@ -79,6 +80,7 @@ volumes:
   mysql_data:
   static_data:
   media_data:
+  notes_data:
 
 networks:
   backend:
