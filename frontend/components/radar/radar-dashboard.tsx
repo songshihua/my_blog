@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 
 import { SiteIcon } from '@/components/ui/site-icon';
+import { RadarBriefButton } from '@/components/radar/radar-brief-button';
 import type { RadarItem, RadarSource, RadarStats } from '@/lib/site-data';
 
 const PAGE_SIZE = 10;
@@ -513,14 +514,7 @@ export function RadarDashboard({
               </p>
             )}
           </section>
-          <button
-            className="secondary-action w-full"
-            disabled
-            title="简报生成服务尚未启用"
-            type="button"
-          >
-            <SiteIcon name="document" /> 生成今日简报（待配置）
-          </button>
+          <RadarBriefButton />
         </aside>
       </div>
     </>

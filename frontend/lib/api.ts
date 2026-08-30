@@ -40,6 +40,25 @@ export type RadarSyncResponse = {
   results: RadarSyncResult[];
 };
 
+export type RadarBrief = {
+  title: string;
+  overview: string;
+  highlights: Array<{
+    item_id: number;
+    title: string;
+    url: string;
+    insight: string;
+  }>;
+  trends: string[];
+  watchlist: string[];
+  source_count: number;
+  period_start: string;
+  period_end: string;
+  generated_at: string;
+  model: string;
+  cached: boolean;
+};
+
 export class RadarSyncRequestError extends Error {
   retryAfter?: number;
 
@@ -47,6 +66,13 @@ export class RadarSyncRequestError extends Error {
     super(message);
     this.name = 'RadarSyncRequestError';
     this.retryAfter = retryAfter;
+  }
+}
+
+export class RadarBriefRequestError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RadarBriefRequestError';
   }
 }
 
@@ -328,4 +354,41 @@ export async function syncRadarSources(): Promise<RadarSyncResponse> {
     throw new RadarSyncRequestError('后端返回了无法识别的同步结果。');
   }
   return payload as RadarSyncResponse;
+}
+
+export async function generateRadarBrief(): Promise<RadarBrief> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/radar/brief/`, {
+      method: 'POST',
+      cache: 'no-store',
+      signal: AbortSignal.timeout(120_000),
+      headers: { Accept: 'application/json' },
+    });
+  } catch (error) {
+    const message =
+      error instanceof DOMException && error.name === 'TimeoutError'
+        ? '简报生成超时，请稍后重试。'
+        : '无法连接简报生成服务，请确认 Django 已启动。';
+    throw new RadarBriefRequestError(message);
+  }
+
+  const payload = (await response.json().catch(() => ({}))) as {
+    detail?: string;
+  } & Partial<RadarBrief>;
+  if (!response.ok) {
+    throw new RadarBriefRequestError(
+      payload.detail || `简报生成失败（HTTP ${response.status}）。`,
+    );
+  }
+  if (
+    !payload.title ||
+    typeof payload.overview !== 'string' ||
+    !Array.isArray(payload.highlights) ||
+    !Array.isArray(payload.trends) ||
+    !Array.isArray(payload.watchlist)
+  ) {
+    throw new RadarBriefRequestError('后端返回了无法识别的简报。');
+  }
+  return payload as RadarBrief;
 }

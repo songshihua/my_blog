@@ -22,6 +22,7 @@
 | `GET /api/v1/radar/sources/` | 来源状态 |
 | `GET /api/v1/radar/stats/` | 可验证的数据库统计 |
 | `POST /api/v1/radar/sync/` | 仅限可信本机前端，同步 arXiv、GitHub、Hugging Face |
+| `POST /api/v1/radar/brief/` | 仅限可信本机前端，用近期真实条目生成今日简报 |
 
 常用查询参数：`search`、`ordering`、`page`、`page_size`，以及资源相关的 `category`、`topics__slug`、`source__source_type`、`kind`、`since`。
 
@@ -30,6 +31,8 @@
 开发环境的 OpenAPI 文档位于 `/api/docs/`；生产环境默认不公开文档页面。
 
 `POST /api/v1/radar/sync/` 不接受来源、查询词、数量或凭据参数，所有范围均由服务端固定。它要求 development 模式、本地同步开关、loopback 客户端地址与允许的本地 `Origin` 同时满足，并带有 MySQL 跨进程锁和冷却时间。production settings 强制关闭该接口。
+
+`POST /api/v1/radar/brief/` 只读取最近 7 天、最多 `RADAR_BRIEF_ITEM_LIMIT` 条非演示雷达记录，并通过 DeepSeek Responses API 输出结构化中文简报。接口要求 development 模式、`RADAR_BRIEF_GENERATION_ENABLED`、loopback 客户端地址与允许的本地 `Origin`；相同数据的结果会缓存 `RADAR_BRIEF_CACHE_SECONDS` 秒，production settings 强制关闭该接口。
 
 `POST /api/v1/articles/import/` 使用 `multipart/form-data`，字段为 `file`、`category_slug`，以及可选的 `title`、`summary`。服务端只接受 `.md` / `.markdown`、`.docx` 和 `.pdf`，校验声明类型、文件签名、解析边界和内容摘要；同一 SHA-256 的文件重复提交返回 `409`。成功返回完整文章详情并使用 `201`。接口要求 development 模式、`NOTE_BROWSER_IMPORT_ENABLED=True`、loopback 客户端地址与允许的本地 `Origin` 同时满足；production settings 强制关闭。
 

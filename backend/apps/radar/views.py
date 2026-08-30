@@ -11,8 +11,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
+from .briefs import BriefGenerationBusy, RadarBriefGenerator
 from .models import IngestionRun, RadarItem, RadarSource
+from .providers.base import ProviderResponseError
 from .serializers import (
+    RadarBriefResponseSerializer,
     RadarItemDetailSerializer,
     RadarItemListSerializer,
     RadarSourceSerializer,
@@ -36,6 +39,19 @@ class CanUseLocalRadarSync(BasePermission):
 
     def has_permission(self, request, _view) -> bool:
         if not settings.DEBUG or not settings.RADAR_BROWSER_SYNC_ENABLED:
+            return False
+        if request.META.get("REMOTE_ADDR") not in {"127.0.0.1", "::1"}:
+            return False
+        return request.headers.get("Origin", "") in set(settings.CORS_ALLOWED_ORIGINS)
+
+
+class CanGenerateLocalRadarBrief(BasePermission):
+    """Keep the metered generation endpoint private to local development."""
+
+    message = "简报生成仅在受信任的本地开发环境中开放。"
+
+    def has_permission(self, request, _view) -> bool:
+        if not settings.DEBUG or not settings.RADAR_BRIEF_GENERATION_ENABLED:
             return False
         if request.META.get("REMOTE_ADDR") not in {"127.0.0.1", "::1"}:
             return False
@@ -192,3 +208,31 @@ class RadarSyncAPIView(APIView):
                 "results": serialized_results,
             }
         )
+
+
+class RadarBriefAPIView(APIView):
+    """Generate a cached brief from recent, non-demo radar records."""
+
+    authentication_classes = ()
+    permission_classes = (CanGenerateLocalRadarBrief,)
+
+    @extend_schema(
+        request=None,
+        responses={
+            200: RadarBriefResponseSerializer,
+            403: RadarSyncErrorSerializer,
+            409: RadarSyncErrorSerializer,
+            502: RadarSyncErrorSerializer,
+            503: RadarSyncErrorSerializer,
+        },
+    )
+    def post(self, _request):
+        generator = RadarBriefGenerator()
+        if error := generator.configuration_error():
+            return Response({"detail": error}, status=503)
+        try:
+            return Response(generator.generate())
+        except BriefGenerationBusy as exc:
+            return Response({"detail": str(exc)}, status=409)
+        except ProviderResponseError as exc:
+            return Response({"detail": str(exc)}, status=502)

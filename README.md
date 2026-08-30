@@ -1,6 +1,6 @@
 # SS·LAB 个人研究博客
 
-这是一个前后端分离的个人研究主页与 AI 前沿雷达项目。前端按照提供的四张界面设计图实现，后端遵循 `宋世华个人博客_MySQL部署文档.md` 的 Django 5.2、MySQL 8.4、Docker 与 Nginx 基线。
+这是一个前后端分离的个人研究主页与 AI 前沿雷达项目。前端按照提供的四张界面设计图实现，后端使用 Django 5.2 与 MySQL 8。当前本地开发默认连接 Windows MySQL80，不依赖 Docker 数据库。
 
 当前阶段只面向本地开发。设计图中的论文、数字、趋势和性能曲线均以 `SAMPLE / DEMO / 示意数据` 标记，不会作为真实研究成果展示。
 
@@ -10,7 +10,7 @@
 - 后端：Django 5.2、Django REST Framework、django-filter、OpenAPI。
 - 数据库：MySQL 8.4，开发与生产保持同一数据库类型。
 - 内容维护：Django Admin，以及受本机安全边界保护的前端笔记导入。
-- 本地隔离：根目录 `.venv` 与 Docker MySQL；所有项目文件均位于 `D:\my_blog`。
+- 本地环境：根目录 `.venv` 与 Windows MySQL80；所有项目文件均位于 `D:\my_blog`。
 
 ## 页面
 
@@ -23,16 +23,29 @@
 | `/radar` | AI 前沿搜索、筛选、摘要、收藏与来源状态 |
 | `/about` | 个人简介与联系方式 |
 
-## 第一次本地启动（推荐：虚拟环境 + Docker MySQL）
+## 第一次本地启动（虚拟环境 + Windows MySQL80）
 
-前置条件：Windows、Python 3.13、Node.js 22、Docker Desktop。
+前置条件：Windows、Python 3.13、Node.js 22，以及正在运行的 MySQL80 服务。
+
+项目连接 `127.0.0.1:3306` 上的 `song_blog` 数据库。`.sql` 文件是一次性导入源，应用运行时不会直接读取它。首次使用或需要从备份恢复时执行：
 
 ```powershell
 Set-Location D:\my_blog
-powershell -ExecutionPolicy Bypass -File .\scripts\setup.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\import-local-mysql.ps1
 ```
 
-脚本会创建 `.env` 随机密钥、`.venv`、安装依赖、启动 MySQL、执行迁移并写入明确标记的本地演示数据。
+脚本默认导入 `backups\song_blog.sql`，会要求输入本机 MySQL 管理员密码，并按照 `.env` 创建或更新应用账号。密码只进入临时客户端配置，脚本结束后立即删除；导入会替换 `song_blog` 中同名的现有表，因此还需要输入 `IMPORT` 确认。
+
+安装项目依赖：
+
+```powershell
+Set-Location D:\my_blog
+.\.venv\Scripts\python.exe -m pip install -r backend\requirements\development.txt -c backend\requirements\constraints.txt
+Set-Location .\frontend
+npm install
+```
+
+如果 `.venv` 尚不存在，请先运行 `python -m venv .venv`。现有 `scripts\setup.ps1` 是保留的 Docker 全自动初始化流程；使用本机 MySQL80 时不要运行它。
 
 分别在两个终端启动：
 
@@ -97,7 +110,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\rotate-local-secrets.ps1
 ```
 
 轮换后需重启正在运行的 Django 进程，使其重新加载 `.env`。
-普通轮换要求本地 MySQL 容器正在运行；脚本会先修改数据库账号，成功后才原子替换 `.env`，不会只改文件造成凭据失配。
+密钥轮换脚本仍用于 Docker 模式；本机 MySQL80 模式下不要运行它。
 
 如果 `.env` 已被错误内容覆盖，导致当前 MySQL 密码也无法再连接，可使用应急恢复脚本。它只重置 `song_blog` 本地数据卷中的数据库账号并重新生成本地密钥，不删除数据卷：
 
@@ -108,18 +121,11 @@ powershell -ExecutionPolicy Bypass -File .\scripts\recover-mysql-access.ps1 `
 
 该脚本仅用于本地开发故障恢复；云端数据库应使用云厂商的密钥轮换与审计流程。
 
-## 本地 MySQL 管理与结构导出
+## 本机 MySQL80 管理
 
-本地 MySQL 默认只监听 `127.0.0.1:3307`。数据库账号和密码保存在本机 `.env`，不要把密码写入 SQL、命令历史或 Git。推荐直接通过 Docker 执行仓库中的只读管理查询：
+本机 MySQL 默认监听 `127.0.0.1:3306`。数据库账号和密码保存在本机 `.env`，不要把密码写入 SQL、命令历史或 Git。Navicat 应连接同一地址，并展开 `song_blog` 数据库。
 
-```powershell
-Set-Location D:\my_blog
-Get-Content -LiteralPath .\deploy\mysql\local-management.sql -Raw |
-    docker compose -f compose.yaml -f compose.dev.yaml exec -T db `
-        sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql -u"$MYSQL_USER" "$MYSQL_DATABASE"'
-```
-
-也可以在 MySQL Workbench 中连接 `127.0.0.1:3307`，选择 `.env` 中 `MYSQL_DATABASE` 对应的数据库后，再打开 [`deploy/mysql/local-management.sql`](deploy/mysql/local-management.sql)。该文件默认运行在只读事务中，包含表规模、内容数量、同步状态、最近采集记录和索引检查，不包含任何凭据。
+在 Navicat 中连接 `127.0.0.1:3306`，选择 `.env` 中 `MYSQL_DATABASE` 对应的数据库后，再打开 [`deploy/mysql/local-management.sql`](deploy/mysql/local-management.sql)。该文件默认运行在只读事务中，包含表规模、内容数量、同步状态、最近采集记录和索引检查，不包含任何凭据。
 
 迁移完成后，可生成不含数据和密码的数据库结构快照：
 

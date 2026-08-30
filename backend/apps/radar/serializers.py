@@ -123,3 +123,24 @@ class RadarSyncResponseSerializer(serializers.Serializer):
 class RadarSyncErrorSerializer(serializers.Serializer):
     detail = serializers.CharField()
     retry_after = serializers.IntegerField(min_value=1, required=False)
+
+
+class RadarBriefHighlightSerializer(serializers.Serializer):
+    item_id = serializers.IntegerField(min_value=1)
+    title = serializers.CharField()
+    url = serializers.URLField()
+    insight = serializers.CharField()
+
+
+class RadarBriefResponseSerializer(serializers.Serializer):
+    title = serializers.CharField()
+    overview = serializers.CharField(allow_blank=True)
+    highlights = RadarBriefHighlightSerializer(many=True)
+    trends = serializers.ListField(child=serializers.CharField())
+    watchlist = serializers.ListField(child=serializers.CharField())
+    source_count = serializers.IntegerField(min_value=1)
+    period_start = serializers.DateTimeField()
+    period_end = serializers.DateTimeField()
+    generated_at = serializers.DateTimeField()
+    model = serializers.CharField()
+    cached = serializers.BooleanField()
