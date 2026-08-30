@@ -61,6 +61,7 @@ DeepSeek Responses API ┘       └─> IngestionRun 审计状态与计数
 - 本地笔记导入同样要求 development、显式开关、loopback 地址和可信 Origin；production settings 强制关闭，且上传大小在 Django 和解析器两层受限。
 - 每次任务使用 MySQL named lock，避免相同任务并发执行；数据库唯一约束提供最终幂等保障。
 - 前端入口固定同步 arXiv、GitHub、Hugging Face，并设置服务端数量上限和冷却时间；已隐藏的 DeepSeek/OpenReview 不会被按钮触发。
+- 今日简报只把最近 7 天的非演示雷达记录交给 DeepSeek 做结构化编辑，不启用联网工具；模型引用的条目 ID 会在服务端重新校验，并缓存相同数据的生成结果以控制费用。
 - Token/Key 只从后端环境变量读取，不保存到 `sync_state`、API 响应、SQL 文件或日志。
 - GitHub Search 查询、回溯天数、最低 Stars、排序方式和单次数量均由服务端配置，浏览器不能提交任意搜索表达式。
 - HTTP 重试次数、等待时间、单次条目数和外部文本长度均有上限。

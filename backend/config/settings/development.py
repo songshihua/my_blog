@@ -14,6 +14,9 @@ CORS_ALLOWED_ORIGINS = env_list(  # noqa: F405
 # Browser-triggered ingestion is a local-development convenience. The API also
 # verifies the request Origin and loopback address before making network calls.
 RADAR_BROWSER_SYNC_ENABLED = env_bool("RADAR_BROWSER_SYNC_ENABLED", True)  # noqa: F405
+RADAR_BRIEF_GENERATION_ENABLED = env_bool(  # noqa: F405
+    "RADAR_BRIEF_GENERATION_ENABLED", True
+)
 
 # Personal note authoring is available only from the trusted local frontend.
 NOTE_BROWSER_IMPORT_ENABLED = env_bool(  # noqa: F405

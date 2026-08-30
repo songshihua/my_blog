@@ -7,6 +7,7 @@ from apps.blog.views import ArticleViewSet
 from apps.core.views import HomeAPIView, ProfileAPIView, TopicViewSet
 from apps.portfolio.views import ProjectViewSet
 from apps.radar.views import (
+    RadarBriefAPIView,
     RadarItemViewSet,
     RadarSourceViewSet,
     RadarStatsAPIView,
@@ -21,6 +22,7 @@ router.register("radar/items", RadarItemViewSet, basename="radar-item")
 router.register("radar/sources", RadarSourceViewSet, basename="radar-source")
 
 urlpatterns = [
+    path("radar/brief/", RadarBriefAPIView.as_view(), name="radar-brief"),
     path("radar/sync/", RadarSyncAPIView.as_view(), name="radar-sync"),
     path("", include(router.urls)),
     path("home/", HomeAPIView.as_view(), name="home"),

@@ -225,6 +225,70 @@ def test_radar_sync_reports_existing_job(api_client, monkeypatch, settings):
 
 
 @pytest.mark.django_db
+def test_trusted_local_frontend_can_generate_radar_brief(
+    api_client, monkeypatch, settings, radar_item
+):
+    settings.DEBUG = True
+    settings.RADAR_BRIEF_GENERATION_ENABLED = True
+    settings.CORS_ALLOWED_ORIGINS = ["http://localhost:3000"]
+    settings.LLM_API_KEY = "test-key"
+    monkeypatch.setattr(
+        "apps.radar.views.RadarBriefGenerator.generate",
+        lambda _self: {
+            "title": "今日简报",
+            "overview": "一条真实研究更新。",
+            "highlights": [
+                {
+                    "item_id": radar_item.id,
+                    "title": radar_item.title,
+                    "url": radar_item.original_url,
+                    "insight": "值得关注。",
+                }
+            ],
+            "trends": [],
+            "watchlist": [],
+            "source_count": 1,
+            "period_start": radar_item.published_at.isoformat(),
+            "period_end": radar_item.published_at.isoformat(),
+            "generated_at": radar_item.published_at.isoformat(),
+            "model": "deepseek-v4-pro",
+            "cached": False,
+        },
+    )
+
+    response = api_client.post(
+        reverse("radar-brief"),
+        HTTP_ORIGIN="http://localhost:3000",
+        REMOTE_ADDR="127.0.0.1",
+    )
+
+    assert response.status_code == 200
+    assert response.data["title"] == "今日简报"
+    assert response.data["highlights"][0]["item_id"] == radar_item.id
+
+
+@pytest.mark.django_db
+def test_radar_brief_rejects_untrusted_origin(api_client, monkeypatch, settings):
+    settings.DEBUG = True
+    settings.RADAR_BRIEF_GENERATION_ENABLED = True
+    settings.CORS_ALLOWED_ORIGINS = ["http://localhost:3000"]
+
+    def unexpected_generate(_self):
+        raise AssertionError("untrusted requests must not invoke the LLM")
+
+    monkeypatch.setattr(
+        "apps.radar.views.RadarBriefGenerator.generate", unexpected_generate
+    )
+    response = api_client.post(
+        reverse("radar-brief"),
+        HTTP_ORIGIN="https://malicious.example",
+        REMOTE_ADDR="127.0.0.1",
+    )
+
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
 def test_project_api_exposes_safe_github_metadata(api_client, project):
     project.external_source = Project.ExternalSource.GITHUB
     project.external_id = "987654"

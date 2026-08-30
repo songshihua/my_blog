@@ -11,6 +11,7 @@ DEBUG = False
 # Public production traffic must never be able to trigger metered or remote
 # ingestion. Add a separately authenticated job/admin flow before changing this.
 RADAR_BROWSER_SYNC_ENABLED = False
+RADAR_BRIEF_GENERATION_ENABLED = False
 NOTE_BROWSER_IMPORT_ENABLED = False
 
 
