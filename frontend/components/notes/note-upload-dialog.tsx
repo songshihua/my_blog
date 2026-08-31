@@ -96,8 +96,8 @@ export function NoteUploadDialog({
         <DialogHeader>
           <DialogTitle className="text-lg font-black">导入本地笔记</DialogTitle>
           <DialogDescription>
-            支持 UTF-8 Markdown、Word DOCX 和可提取文字的 PDF，单个文件不超过 8
-            MB。
+            支持 UTF-8 Markdown、Word DOCX 和 PDF（含扫描版），单个文件不超过 8
+            MB。PDF 可在原版视图与文本视图间切换。
           </DialogDescription>
         </DialogHeader>
         <form className="grid gap-4" onSubmit={submit}>

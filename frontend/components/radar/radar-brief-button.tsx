@@ -1,6 +1,18 @@
 'use client';
 
 import { useState } from 'react';
+import { CheckCircle2, Download } from 'lucide-react';
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 import {
   Dialog,
@@ -31,11 +43,73 @@ function formatDate(value: string) {
   }).format(date);
 }
 
+type SaveFilePicker = (options: {
+  suggestedName: string;
+  types: Array<{
+    description: string;
+    accept: Record<string, string[]>;
+  }>;
+}) => Promise<{
+  createWritable: () => Promise<{
+    write: (data: Blob) => Promise<void>;
+    close: () => Promise<void>;
+  }>;
+}>;
+
+function briefToMarkdown(brief: RadarBrief) {
+  const lines = [
+    `# ${brief.title}`,
+    '',
+    `> 生成时间：${formatDate(brief.generated_at)}  `,
+    `> 内容来源：${brief.source_count} 条真实雷达内容  `,
+    `> 使用模型：${brief.model}`,
+    '',
+    '## 简报概览',
+    '',
+    brief.overview,
+    '',
+    '## 重点进展',
+    '',
+  ];
+
+  brief.highlights.forEach((item, index) => {
+    const safeTitle = item.title.replaceAll('[', '\\[').replaceAll(']', '\\]');
+    lines.push(
+      `### ${index + 1}. [${safeTitle}](${item.url})`,
+      '',
+      item.insight,
+      '',
+    );
+  });
+
+  if (brief.trends.length) {
+    lines.push('## 趋势判断', '', ...brief.trends.map((item) => `- ${item}`), '');
+  }
+  if (brief.watchlist.length) {
+    lines.push('## 后续关注', '', ...brief.watchlist.map((item) => `- ${item}`), '');
+  }
+  lines.push('---', '', '本简报由 AI 基于站内已验证来源生成，请通过条目标题链接核对原文。', '');
+  return lines.join('\n');
+}
+
+function downloadWithBrowser(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export function RadarBriefButton() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [brief, setBrief] = useState<RadarBrief | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
+  const [downloadCompleteOpen, setDownloadCompleteOpen] = useState(false);
+  const [downloadCompleteMessage, setDownloadCompleteMessage] = useState('');
 
   async function generate() {
     if (loading) return;
@@ -56,6 +130,56 @@ export function RadarBriefButton() {
     }
   }
 
+  async function downloadBrief() {
+    if (!brief || saving) return;
+    setSaving(true);
+    setSaveMessage('');
+    const date = new Date(brief.generated_at);
+    const datePart = Number.isFinite(date.getTime())
+      ? date.toLocaleDateString('sv-SE', { timeZone: 'Asia/Shanghai' })
+      : 'today';
+    const filename = `AI研究简报-${datePart}.md`;
+    const blob = new Blob([briefToMarkdown(brief)], {
+      type: 'text/markdown;charset=utf-8',
+    });
+
+    try {
+      const picker = (
+        window as Window & { showSaveFilePicker?: SaveFilePicker }
+      ).showSaveFilePicker;
+      if (picker) {
+        const handle = await picker({
+          suggestedName: filename,
+          types: [
+            {
+              description: 'Markdown 文档',
+              accept: { 'text/markdown': ['.md'] },
+            },
+          ],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        setSaveMessage('简报已保存到所选路径。');
+        setDownloadCompleteMessage(`文件 ${filename} 已保存到你选择的路径。`);
+        setDownloadCompleteOpen(true);
+      } else {
+        downloadWithBrowser(blob, filename);
+        setSaveMessage('浏览器不支持选择路径，已保存到默认下载目录。');
+        setDownloadCompleteMessage(`文件 ${filename} 已保存到浏览器默认下载目录。`);
+        setDownloadCompleteOpen(true);
+      }
+    } catch (cause) {
+      if (cause instanceof DOMException && cause.name === 'AbortError') {
+        setSaveMessage('已取消下载。');
+      } else {
+        setSaveMessage('保存失败，请重试或更换保存路径。');
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <>
       <button
@@ -70,7 +194,7 @@ export function RadarBriefButton() {
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-2xl">
+        <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto border border-slate-200 bg-white text-slate-950 opacity-100 shadow-2xl sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle className="pr-8 text-xl font-black">
               {brief?.title ?? (loading ? '正在生成今日简报' : '今日简报')}
@@ -150,10 +274,51 @@ export function RadarBriefButton() {
               <p className="border-t border-line pt-3 text-[11px] text-muted-ink">
                 内容由 {brief.model} 基于站内已验证来源生成，请点击标题核对原文。
               </p>
+
+              <div className="sticky -bottom-4 -mx-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3 shadow-[0_-8px_20px_rgba(15,23,42,0.06)]">
+                <p aria-live="polite" className="min-h-5 flex-1 text-xs text-muted-ink">
+                  {saveMessage || '下载时可选择保存目录和文件名。'}
+                </p>
+                <button
+                  aria-busy={saving}
+                  className="primary-action shrink-0 disabled:cursor-wait disabled:opacity-70"
+                  disabled={saving}
+                  onClick={downloadBrief}
+                  type="button"
+                >
+                  {saving ? <Spinner /> : <Download className="size-4" />}
+                  {saving ? '正在保存…' : '选择路径并下载'}
+                </button>
+              </div>
             </article>
           )}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={downloadCompleteOpen}
+        onOpenChange={setDownloadCompleteOpen}
+      >
+        <AlertDialogContent className="border border-emerald-200 bg-white text-slate-950 opacity-100 shadow-2xl">
+          <AlertDialogHeader>
+            <AlertDialogMedia className="bg-emerald-50 text-emerald-600">
+              <CheckCircle2 />
+            </AlertDialogMedia>
+            <AlertDialogTitle className="font-black">下载完成</AlertDialogTitle>
+            <AlertDialogDescription>
+              {downloadCompleteMessage}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="bg-slate-50">
+            <AlertDialogAction
+              className="w-full sm:w-auto"
+              onClick={() => setDownloadCompleteOpen(false)}
+            >
+              知道了
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

@@ -144,3 +144,11 @@ class RadarBriefResponseSerializer(serializers.Serializer):
     generated_at = serializers.DateTimeField()
     model = serializers.CharField()
     cached = serializers.BooleanField()
+
+
+class RadarItemSummaryResponseSerializer(serializers.Serializer):
+    item_id = serializers.IntegerField(min_value=1)
+    ai_summary = serializers.DictField(child=serializers.CharField())
+    cached = serializers.BooleanField()
+    model = serializers.CharField()
+    generated_at = serializers.DateTimeField()

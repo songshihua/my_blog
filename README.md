@@ -79,7 +79,7 @@ npm run dev
 
 访问 `http://localhost:3000/notes`，可在左侧新建目录、添加笔记或打开“管理笔记”。上传时选择目标目录；管理窗口支持逐篇删除文章，并在目录为空且不包含子目录时删除目录。所有删除操作都有二次确认。
 
-- 支持 UTF-8 编码的 `.md` / `.markdown`、Word `.docx`、包含可提取文字的 `.pdf`。
+- 支持 UTF-8 编码的 `.md` / `.markdown`、Word `.docx` 和 `.pdf`（含扫描版）；PDF 可在原版视图与文本视图间切换。
 - 暂不支持旧版 Word `.doc`；扫描版 PDF 暂不执行 OCR，应先在本地转换为可检索 PDF。
 - 单文件默认不超过 8 MB；可通过后端环境变量 `NOTE_UPLOAD_MAX_BYTES` 下调，上限固定为 10 MB。
 - 原文件保存在项目目录 `data/notes/YYYY/MM/`，数据库只保存文章、目录、校验摘要与随机文件路径。

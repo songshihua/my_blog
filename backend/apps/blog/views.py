@@ -176,6 +176,25 @@ class ArticleViewSet(ReadOnlyModelViewSet):
         response["Cache-Control"] = "private, no-store"
         return response
 
+    @extend_schema(responses={(200, "application/pdf"): bytes})
+    @action(detail=True, methods=("get",), url_path="preview-file")
+    def preview_file(self, request, slug=None):
+        article = self.get_object()
+        source = get_object_or_404(
+            ArticleSourceFile,
+            article=article,
+            source_format=ArticleSourceFile.SourceFormat.PDF,
+        )
+        response = FileResponse(
+            source.file.open("rb"),
+            as_attachment=False,
+            filename=source.original_filename,
+            content_type="application/pdf",
+        )
+        response["X-Content-Type-Options"] = "nosniff"
+        response["Cache-Control"] = "private, no-store"
+        return response
+
     @extend_schema(
         request=None,
         responses={204: None, 403: NoteImportErrorSerializer},

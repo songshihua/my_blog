@@ -302,6 +302,12 @@ class SourceSynchronizer:
             item.topics.set(topics)
             return item, True, True
 
+        # Provider refreshes commonly carry no AI summary. Preserve a summary
+        # generated and persisted by the per-item endpoint instead of clearing
+        # it during the next metadata synchronization.
+        if item.ai_summary and not record.ai_summary:
+            defaults["ai_summary"] = item.ai_summary
+
         changed = any(getattr(item, field) != value for field, value in defaults.items())
         existing_topic_ids = set(item.topics.values_list("id", flat=True))
         topic_ids = {topic.id for topic in topics}

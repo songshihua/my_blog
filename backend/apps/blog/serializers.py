@@ -126,11 +126,21 @@ class CategoryCreateRequestSerializer(serializers.ModelSerializer):
 class ArticleSourceFileSerializer(serializers.ModelSerializer):
     source_format_label = serializers.CharField(source="get_source_format_display", read_only=True)
     download_url = serializers.SerializerMethodField()
+    preview_url = serializers.SerializerMethodField()
 
     @extend_schema_field(serializers.CharField())
     def get_download_url(self, obj: ArticleSourceFile) -> str:
         return reverse(
             "article-source-file",
+            kwargs={"slug": obj.article.slug},
+        )
+
+    @extend_schema_field(serializers.CharField(allow_null=True))
+    def get_preview_url(self, obj: ArticleSourceFile) -> str | None:
+        if obj.source_format != ArticleSourceFile.SourceFormat.PDF:
+            return None
+        return reverse(
+            "article-preview-file",
             kwargs={"slug": obj.article.slug},
         )
 
@@ -142,6 +152,7 @@ class ArticleSourceFileSerializer(serializers.ModelSerializer):
             "source_format_label",
             "size_bytes",
             "download_url",
+            "preview_url",
         )
 
 

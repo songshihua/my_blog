@@ -14,6 +14,7 @@
 | `GET /api/v1/articles/{slug}/` | 文章详情 |
 | `GET /api/v1/articles/{slug}/related/` | 相关文章 |
 | `GET /api/v1/articles/{slug}/source-file/` | 下载该文章对应的原始 MD、DOCX 或 PDF 文件 |
+| `GET /api/v1/articles/{slug}/preview-file/` | 以内联 PDF 响应提供原版视图 |
 | `POST /api/v1/articles/categories/` | 仅限可信本机前端，新建笔记目录 |
 | `POST /api/v1/articles/import/` | 仅限可信本机前端，导入一个笔记文件并发布文章 |
 | `DELETE /api/v1/articles/{slug}/manage/` | 仅限可信本机前端，删除一篇笔记文章 |
@@ -23,6 +24,7 @@
 | `GET /api/v1/radar/stats/` | 可验证的数据库统计 |
 | `POST /api/v1/radar/sync/` | 仅限可信本机前端，同步 arXiv、GitHub、Hugging Face |
 | `POST /api/v1/radar/brief/` | 仅限可信本机前端，用近期真实条目生成今日简报 |
+| `POST /api/v1/radar/items/{id}/summary/` | 仅限可信本机前端，生成并持久化单条内容总结 |
 
 常用查询参数：`search`、`ordering`、`page`、`page_size`，以及资源相关的 `category`、`topics__slug`、`source__source_type`、`kind`、`since`。
 
@@ -34,8 +36,12 @@
 
 `POST /api/v1/radar/brief/` 只读取最近 7 天、最多 `RADAR_BRIEF_ITEM_LIMIT` 条非演示雷达记录，并通过 DeepSeek Responses API 输出结构化中文简报。接口要求 development 模式、`RADAR_BRIEF_GENERATION_ENABLED`、loopback 客户端地址与允许的本地 `Origin`；相同数据的结果会缓存 `RADAR_BRIEF_CACHE_SECONDS` 秒，production settings 强制关闭该接口。
 
+`POST /api/v1/radar/items/{id}/summary/` 首次调用时根据该条目的可信数据库字段生成结构化总结，并写入 `RadarItem.ai_summary`。再次调用直接返回持久化结果，不产生模型请求；同一条目的并发首次请求由 MySQL 命名锁合并。权限要求与简报生成接口相同。
+
 `POST /api/v1/articles/import/` 使用 `multipart/form-data`，字段为 `file`、`category_slug`，以及可选的 `title`、`summary`。服务端只接受 `.md` / `.markdown`、`.docx` 和 `.pdf`，校验声明类型、文件签名、解析边界和内容摘要；同一 SHA-256 的文件重复提交返回 `409`。成功返回完整文章详情并使用 `201`。接口要求 development 模式、`NOTE_BROWSER_IMPORT_ENABLED=True`、loopback 客户端地址与允许的本地 `Origin` 同时满足；production settings 强制关闭。
+
+PDF 导入会保留原始文件作为视觉权威版本，并通过 `source_file.preview_url` 提供给 PDF.js。提取文本只用于文本视图、目录和检索；纯扫描 PDF 没有可提取文本时仍可导入并使用原版视图。
 
 目录创建、文章删除和目录删除沿用相同的可信本机权限。删除文章会同时清理其源文件记录和私有源文件；目录删除仅允许空目录，若仍包含文章或子目录则返回 `409`。
 
-文章列表与详情中的 `source_file` 仅包含原文件名、格式、大小和受控下载 URL，不返回磁盘绝对路径、随机存储名或 SHA-256。分类对象包含 `parent_slug` 与从根到父级的 `ancestors`，前端据此构建任意深度目录树。
+文章列表与详情中的 `source_file` 仅包含原文件名、格式、大小、受控下载 URL，以及 PDF 专用的受控预览 URL，不返回磁盘绝对路径、随机存储名或 SHA-256。分类对象包含 `parent_slug` 与从根到父级的 `ancestors`，前端据此构建任意深度目录树。

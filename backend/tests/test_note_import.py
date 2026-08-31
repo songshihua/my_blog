@@ -101,6 +101,11 @@ def test_markdown_docx_and_pdf_extract_real_text(settings):
     assert "| 字段 | 说明 |" in docx.body_markdown
     assert "Readable PDF note" in pdf.body_markdown
 
+    scanned_pdf = extract_uploaded_note(
+        SimpleUploadedFile("scan.pdf", make_pdf(""), content_type="application/pdf")
+    )
+    assert "原版视图" in scanned_pdf.body_markdown
+
 
 def test_import_rejects_spoofed_and_unsafe_files(settings):
     settings.NOTE_UPLOAD_MAX_BYTES = 32
@@ -181,12 +186,48 @@ def test_trusted_local_frontend_imports_and_downloads_markdown(
         "source_format_label",
         "size_bytes",
         "download_url",
+        "preview_url",
     }
+    assert detail.data["source_file"]["preview_url"] is None
     download = api_client.get(reverse("article-source-file", kwargs={"slug": article.slug}))
     assert download.status_code == 200
     assert download["X-Content-Type-Options"] == "nosniff"
     assert download["Content-Disposition"].startswith("attachment;")
     download.close()
+
+
+@pytest.mark.django_db
+def test_uploaded_pdf_has_inline_original_preview(
+    api_client, category, settings, note_upload_root
+):
+    settings.DEBUG = True
+    settings.NOTE_BROWSER_IMPORT_ENABLED = True
+    settings.NOTE_UPLOAD_ROOT = note_upload_root
+    settings.NOTE_UPLOAD_MAX_BYTES = 8 * 1024 * 1024
+    settings.CORS_ALLOWED_ORIGINS = ["http://localhost:3000"]
+    response = api_client.post(
+        reverse("article-import-file"),
+        {
+            "file": SimpleUploadedFile(
+                "original.pdf", make_pdf("Original layout"), content_type="application/pdf"
+            ),
+            "category_slug": category.slug,
+        },
+        format="multipart",
+        HTTP_ORIGIN="http://localhost:3000",
+        REMOTE_ADDR="127.0.0.1",
+    )
+
+    assert response.status_code == 201
+    assert response.data["source_file"]["preview_url"].endswith("/preview-file/")
+    preview = api_client.get(
+        reverse("article-preview-file", kwargs={"slug": response.data["slug"]})
+    )
+    assert preview.status_code == 200
+    assert preview["Content-Type"] == "application/pdf"
+    assert preview["Content-Disposition"].startswith("inline;")
+    assert preview["X-Content-Type-Options"] == "nosniff"
+    preview.close()
 
 
 @pytest.mark.django_db
