@@ -59,6 +59,14 @@ export type RadarBrief = {
   cached: boolean;
 };
 
+export type RadarItemSummaryResponse = {
+  item_id: number;
+  ai_summary: Record<string, string>;
+  cached: boolean;
+  model: string;
+  generated_at: string;
+};
+
 export class RadarSyncRequestError extends Error {
   retryAfter?: number;
 
@@ -73,6 +81,13 @@ export class RadarBriefRequestError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'RadarBriefRequestError';
+  }
+}
+
+export class RadarItemSummaryRequestError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RadarItemSummaryRequestError';
   }
 }
 
@@ -391,4 +406,41 @@ export async function generateRadarBrief(): Promise<RadarBrief> {
     throw new RadarBriefRequestError('后端返回了无法识别的简报。');
   }
   return payload as RadarBrief;
+}
+
+export async function summarizeRadarItem(
+  itemId: number,
+): Promise<RadarItemSummaryResponse> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/radar/items/${itemId}/summary/`, {
+      method: 'POST',
+      cache: 'no-store',
+      signal: AbortSignal.timeout(120_000),
+      headers: { Accept: 'application/json' },
+    });
+  } catch (error) {
+    const message =
+      error instanceof DOMException && error.name === 'TimeoutError'
+        ? '内容总结超时，请稍后重试。'
+        : '无法连接内容总结服务，请确认 Django 已启动。';
+    throw new RadarItemSummaryRequestError(message);
+  }
+
+  const payload = (await response.json().catch(() => ({}))) as {
+    detail?: string;
+  } & Partial<RadarItemSummaryResponse>;
+  if (!response.ok) {
+    throw new RadarItemSummaryRequestError(
+      payload.detail || `内容总结失败（HTTP ${response.status}）。`,
+    );
+  }
+  if (
+    payload.item_id !== itemId ||
+    !payload.ai_summary ||
+    typeof payload.ai_summary !== 'object'
+  ) {
+    throw new RadarItemSummaryRequestError('后端返回了无法识别的总结。');
+  }
+  return payload as RadarItemSummaryResponse;
 }

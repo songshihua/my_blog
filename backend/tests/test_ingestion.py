@@ -85,6 +85,9 @@ def test_synchronizer_upserts_github_radar_and_project():
     first = synchronizer.sync(
         source, FakeGitHubProvider(), limit=10, dry_run=False
     )
+    persisted_item = RadarItem.objects.get(source=source, external_id="987")
+    persisted_item.ai_summary = {"核心内容": "已经生成的持久化总结"}
+    persisted_item.save(update_fields=("ai_summary", "updated_at"))
     second = synchronizer.sync(
         source, FakeGitHubProvider(), limit=10, dry_run=False
     )
@@ -101,6 +104,7 @@ def test_synchronizer_upserts_github_radar_and_project():
     assert project.source_metadata["stars"] == 7
 
     item = RadarItem.objects.get(source=source, external_id="987")
+    assert item.ai_summary == {"核心内容": "已经生成的持久化总结"}
     item.is_visible = False
     item.save(update_fields=("is_visible", "updated_at"))
     third = synchronizer.sync(source, FakeGitHubProvider(), limit=10, dry_run=False)

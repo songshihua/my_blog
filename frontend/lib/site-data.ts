@@ -54,6 +54,7 @@ export type ArticleSourceFile = {
   source_format_label: string;
   size_bytes: number;
   download_url: string;
+  preview_url: string | null;
 };
 
 export type Article = {

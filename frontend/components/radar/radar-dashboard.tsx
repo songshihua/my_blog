@@ -4,6 +4,11 @@ import { useMemo, useState } from 'react';
 
 import { SiteIcon } from '@/components/ui/site-icon';
 import { RadarBriefButton } from '@/components/radar/radar-brief-button';
+import { Spinner } from '@/components/ui/spinner';
+import {
+  RadarItemSummaryRequestError,
+  summarizeRadarItem,
+} from '@/lib/api';
 import type { RadarItem, RadarSource, RadarStats } from '@/lib/site-data';
 
 const PAGE_SIZE = 10;
@@ -54,7 +59,12 @@ function sourceStatus(source: RadarSource) {
   return source.status_label;
 }
 
-type OverviewRow = { icon: string; label: string; value: number };
+type OverviewRow = {
+  icon: string;
+  kind: string;
+  label: string;
+  value: number;
+};
 type PageToken = number | `ellipsis-${number}`;
 
 function getPageTokens(activePage: number, totalPages: number): PageToken[] {
@@ -94,16 +104,38 @@ export function RadarDashboard({
 }) {
   const [query, setQuery] = useState('');
   const [source, setSource] = useState('all');
+  const [kind, setKind] = useState('all');
   const [topic, setTopic] = useState('全部');
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedId, setExpandedId] = useState<number | null>(
     initialItems.find((item) => !item.is_demo)?.id ?? null,
   );
   const [savedIds, setSavedIds] = useState<number[]>([]);
+  const [itemSummaries, setItemSummaries] = useState<
+    Record<number, Record<string, string>>
+  >(() =>
+    Object.fromEntries(
+      initialItems
+        .filter(
+          (item) => item.ai_summary && Object.keys(item.ai_summary).length,
+        )
+        .map((item) => [item.id, item.ai_summary ?? {}]),
+    ),
+  );
+  const [summarizingIds, setSummarizingIds] = useState<number[]>([]);
+  const [summaryErrors, setSummaryErrors] = useState<Record<number, string>>(
+    {},
+  );
 
   const liveItems = useMemo(
-    () => initialItems.filter((item) => !item.is_demo),
-    [initialItems],
+    () =>
+      initialItems
+        .filter((item) => !item.is_demo)
+        .map((item) => ({
+          ...item,
+          ai_summary: itemSummaries[item.id] ?? item.ai_summary,
+        })),
+    [initialItems, itemSummaries],
   );
 
   const visibleItems = useMemo(() => {
@@ -116,13 +148,14 @@ export function RadarDashboard({
           .includes(normalized);
       const matchesSource =
         source === 'all' || item.source.source_type === source;
+      const matchesKind = kind === 'all' || item.kind === kind;
       const matchesTopic =
         topic === '全部' ||
         item.topics.some((entry) => entry.name === topic) ||
         (topic === '推理优化' && item.topics.length > 0);
-      return matchesQuery && matchesSource && matchesTopic;
+      return matchesQuery && matchesSource && matchesKind && matchesTopic;
     });
-  }, [liveItems, query, source, topic]);
+  }, [kind, liveItems, query, source, topic]);
 
   const totalPages = Math.ceil(visibleItems.length / PAGE_SIZE);
   const activePage = Math.min(currentPage, Math.max(totalPages, 1));
@@ -148,16 +181,80 @@ export function RadarDashboard({
   }, [liveItems]);
 
   const overview: OverviewRow[] = [
-    { icon: '▣', label: '新增论文', value: stats.by_kind.paper ?? 0 },
-    { icon: '⌘', label: '开源项目', value: stats.by_kind.repository ?? 0 },
-    { icon: '◇', label: '模型发布', value: stats.by_kind.model ?? 0 },
-    { icon: '▤', label: '数据集', value: stats.by_kind.dataset ?? 0 },
+    {
+      icon: '▣',
+      kind: 'paper',
+      label: '新增论文',
+      value: stats.by_kind.paper ?? 0,
+    },
+    {
+      icon: '⌘',
+      kind: 'repository',
+      label: '开源项目',
+      value: stats.by_kind.repository ?? 0,
+    },
+    {
+      icon: '◇',
+      kind: 'model',
+      label: '模型发布',
+      value: stats.by_kind.model ?? 0,
+    },
+    {
+      icon: '▤',
+      kind: 'dataset',
+      label: '数据集',
+      value: stats.by_kind.dataset ?? 0,
+    },
   ];
   function toggleSaved(id: number) {
     setSavedIds((current) =>
       current.includes(id)
         ? current.filter((item) => item !== id)
         : [...current, id],
+    );
+  }
+
+  async function toggleItemSummary(item: RadarItem) {
+    const hasSummary = Boolean(
+      item.ai_summary && Object.keys(item.ai_summary).length,
+    );
+    if (hasSummary) {
+      setExpandedId(item.id === expandedId ? null : item.id);
+      return;
+    }
+    if (summarizingIds.includes(item.id)) return;
+
+    setSummarizingIds((current) => [...current, item.id]);
+    setSummaryErrors((current) => ({ ...current, [item.id]: '' }));
+    try {
+      const result = await summarizeRadarItem(item.id);
+      setItemSummaries((current) => ({
+        ...current,
+        [item.id]: result.ai_summary,
+      }));
+      setExpandedId(item.id);
+    } catch (cause) {
+      setSummaryErrors((current) => ({
+        ...current,
+        [item.id]:
+          cause instanceof RadarItemSummaryRequestError
+            ? cause.message
+            : '内容总结失败，请稍后重试。',
+      }));
+    } finally {
+      setSummarizingIds((current) =>
+        current.filter((itemId) => itemId !== item.id),
+      );
+    }
+  }
+
+  function filterByKind(nextKind: string) {
+    setKind((current) => (current === nextKind ? 'all' : nextKind));
+    setCurrentPage(1);
+    window.requestAnimationFrame(() =>
+      document
+        .getElementById('radar-results')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
     );
   }
 
@@ -269,7 +366,10 @@ export function RadarDashboard({
             </div>
           </section>
 
-          <div className="mb-2 mt-3 flex items-end justify-between px-1">
+          <div
+            className="mb-2 mt-3 scroll-mt-20 flex items-end justify-between px-1"
+            id="radar-results"
+          >
             <h2 className="text-lg font-black">
               研究更新{' '}
               <span className="ml-2 text-xs font-normal text-muted-ink">
@@ -286,6 +386,7 @@ export function RadarDashboard({
               paginatedItems.map((item) => {
                 const expanded = item.id === expandedId;
                 const saved = savedIds.includes(item.id);
+                const summarizing = summarizingIds.includes(item.id);
                 const hasAiSummary = Boolean(
                   item.ai_summary && Object.keys(item.ai_summary).length,
                 );
@@ -310,17 +411,24 @@ export function RadarDashboard({
                       <span>{formatTimestamp(item.published_at)}</span>
                       <span className="tag-chip ml-1 text-success">LIVE</span>
                       <div className="ml-auto flex gap-2">
-                        {hasAiSummary && (
-                          <button
-                            className="small-action text-brand"
-                            onClick={() =>
-                              setExpandedId(expanded ? null : item.id)
-                            }
-                            type="button"
-                          >
-                            <SiteIcon name="sparkle" /> AI 摘要
-                          </button>
-                        )}
+                        <button
+                          aria-busy={summarizing}
+                          className="small-action text-brand disabled:cursor-wait disabled:opacity-60"
+                          disabled={summarizing}
+                          onClick={() => toggleItemSummary(item)}
+                          type="button"
+                        >
+                          {summarizing ? (
+                            <Spinner />
+                          ) : (
+                            <SiteIcon name="sparkle" />
+                          )}{' '}
+                          {summarizing
+                            ? '总结中…'
+                            : hasAiSummary
+                              ? 'AI 摘要'
+                              : 'AI 总结'}
+                        </button>
                         <button
                           aria-pressed={saved}
                           className="small-action"
@@ -391,6 +499,14 @@ export function RadarDashboard({
                           ),
                         )}
                       </dl>
+                    )}
+                    {summaryErrors[item.id] && (
+                      <p
+                        aria-live="polite"
+                        className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"
+                      >
+                        {summaryErrors[item.id]}
+                      </p>
                     )}
                   </article>
                 );
@@ -465,13 +581,21 @@ export function RadarDashboard({
         <aside className="space-y-3 xl:sticky xl:top-20">
           <section className="side-card">
             <h2>内容速览</h2>
-            {overview.map(({ icon, label, value }) => (
-              <div className="overview-row" key={label}>
+            {overview.map(({ icon, kind: rowKind, label, value }) => (
+              <button
+                aria-pressed={kind === rowKind}
+                className={`overview-row w-full text-left transition-colors hover:text-brand ${
+                  kind === rowKind ? 'overview-row-active' : ''
+                }`}
+                key={label}
+                onClick={() => filterByKind(rowKind)}
+                type="button"
+              >
                 <span className="text-brand">{icon}</span>
                 <span>{label}</span>
                 <strong>{value}</strong>
                 <span>›</span>
-              </div>
+              </button>
             ))}
           </section>
           <section className="side-card">

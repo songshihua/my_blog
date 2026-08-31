@@ -6,8 +6,9 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "dev": "vinext dev",
-    "build": "vinext build",
+    "prepare:pdfjs": "node scripts/copy-pdfjs-assets.mjs",
+    "dev": "npm run prepare:pdfjs && vinext dev",
+    "build": "npm run prepare:pdfjs && vinext build",
     "start": "wrangler dev --config dist/server/wrangler.json",
     "lint": "oxlint",
     "typecheck": "tsc --noEmit",
@@ -23,6 +24,7 @@
     "embla-carousel-react": "8.5.2",
     "input-otp": "1.4.2",
     "lucide-react": "1.31.0",
+    "pdfjs-dist": "^6.3.289",
     "react": "19.2.8",
     "react-day-picker": "9.8.1",
     "react-dom": "19.2.8",

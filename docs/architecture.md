@@ -39,8 +39,9 @@ DeepSeek Responses API ┘       └─> IngestionRun 审计状态与计数
 - `Category.parent` 构成最多 8 层的邻接表分类树；数据库唯一约束保护名称和 slug，`PROTECT` 防止误删仍被引用的分类。
 - `Article` 保存供公开页面渲染的规范化 Markdown；`ArticleSourceFile` 一对一保存原文件元数据、SHA-256、提取目录和私有存储引用。
 - 原始字节写入 `data/notes/YYYY/MM/<random-uuid>.<ext>`。路径由服务端生成，不使用浏览器文件名，也不通过 Django `MEDIA_URL` 直接暴露。
-- Markdown 要求 UTF-8；DOCX 在解析前限制 ZIP 路径、成员数、展开大小、压缩比、宏、嵌入对象及危险 XML；PDF 限制页数、加密状态和提取字符数。
+- Markdown 要求 UTF-8；DOCX 在解析前限制 ZIP 路径、成员数、展开大小、压缩比、宏、嵌入对象及危险 XML；PDF 限制页数、加密状态和提取字符数，纯扫描 PDF 允许仅使用原版视图。
 - 正文通过 `react-markdown` 与 GFM 渲染，不启用原始 HTML；不可信图片不会被页面自动加载。原文件下载经文章权限范围内的 API 返回，并设置 `nosniff` 与 `no-store`。
+- PDF 阅读页默认使用 PDF.js 按需渲染原始页面，并与提取文本互斥切换；字体、CMap、WASM 与图像解码资源随前端构建发布，文本提取不再承担视觉还原职责。
 - 首版同步提取属于有界本地工作流。扫描 PDF 不做 OCR，旧 `.doc` 需先转为 `.docx`，避免引入常驻任务队列和高风险转换服务。
 
 ## 环境
@@ -62,6 +63,7 @@ DeepSeek Responses API ┘       └─> IngestionRun 审计状态与计数
 - 每次任务使用 MySQL named lock，避免相同任务并发执行；数据库唯一约束提供最终幂等保障。
 - 前端入口固定同步 arXiv、GitHub、Hugging Face，并设置服务端数量上限和冷却时间；已隐藏的 DeepSeek/OpenReview 不会被按钮触发。
 - 今日简报只把最近 7 天的非演示雷达记录交给 DeepSeek 做结构化编辑，不启用联网工具；模型引用的条目 ID 会在服务端重新校验，并缓存相同数据的生成结果以控制费用。
+- 单条雷达内容总结写入 `RadarItem.ai_summary` 持久化保存；生成前后都会检查已有结果，并使用按条目划分的 MySQL 命名锁避免并发重复计费。
 - Token/Key 只从后端环境变量读取，不保存到 `sync_state`、API 响应、SQL 文件或日志。
 - GitHub Search 查询、回溯天数、最低 Stars、排序方式和单次数量均由服务端配置，浏览器不能提交任意搜索表达式。
 - HTTP 重试次数、等待时间、单次条目数和外部文本长度均有上限。

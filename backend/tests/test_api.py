@@ -289,6 +289,56 @@ def test_radar_brief_rejects_untrusted_origin(api_client, monkeypatch, settings)
 
 
 @pytest.mark.django_db
+def test_trusted_local_frontend_can_persist_item_summary(
+    api_client, monkeypatch, settings, radar_item
+):
+    settings.DEBUG = True
+    settings.RADAR_BRIEF_GENERATION_ENABLED = True
+    settings.CORS_ALLOWED_ORIGINS = ["http://localhost:3000"]
+    monkeypatch.setattr(
+        "apps.radar.views.RadarItemSummarizer.summarize",
+        lambda _self, item: {
+            "item_id": item.id,
+            "ai_summary": {"核心内容": "持久化总结"},
+            "cached": False,
+            "model": "deepseek-v4-pro",
+            "generated_at": item.updated_at,
+        },
+    )
+
+    response = api_client.post(
+        reverse("radar-item-summary", kwargs={"pk": radar_item.pk}),
+        HTTP_ORIGIN="http://localhost:3000",
+        REMOTE_ADDR="127.0.0.1",
+    )
+
+    assert response.status_code == 200
+    assert response.data["item_id"] == radar_item.id
+    assert response.data["ai_summary"] == {"核心内容": "持久化总结"}
+
+
+@pytest.mark.django_db
+def test_item_summary_rejects_untrusted_origin(api_client, monkeypatch, settings, radar_item):
+    settings.DEBUG = True
+    settings.RADAR_BRIEF_GENERATION_ENABLED = True
+    settings.CORS_ALLOWED_ORIGINS = ["http://localhost:3000"]
+
+    def unexpected_summary(_self, _item):
+        raise AssertionError("untrusted requests must not invoke the LLM")
+
+    monkeypatch.setattr(
+        "apps.radar.views.RadarItemSummarizer.summarize", unexpected_summary
+    )
+    response = api_client.post(
+        reverse("radar-item-summary", kwargs={"pk": radar_item.pk}),
+        HTTP_ORIGIN="https://malicious.example",
+        REMOTE_ADDR="127.0.0.1",
+    )
+
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
 def test_project_api_exposes_safe_github_metadata(api_client, project):
     project.external_source = Project.ExternalSource.GITHUB
     project.external_id = "987654"

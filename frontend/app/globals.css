@@ -444,6 +444,10 @@
     @apply ml-auto text-2xl font-black;
   }
 
+  .overview-row-active {
+    @apply -mx-2 w-[calc(100%+1rem)] rounded-lg border-b-transparent bg-brand-soft/60 px-2 text-brand;
+  }
+
   .trend-row {
     @apply flex items-center gap-3 py-1.5 text-xs;
   }
@@ -742,6 +746,71 @@
   .note-reader-header > p {
     @apply mt-3 text-sm leading-7 text-muted-ink;
   }
+
+  .pdf-note-reader {
+    @apply mt-6 min-w-0;
+  }
+
+  .pdf-view-toolbar {
+    @apply sticky top-16 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-white p-2 shadow-sm;
+  }
+
+  .pdf-view-tabs,
+  .pdf-view-actions {
+    @apply flex flex-wrap items-center gap-1;
+  }
+
+  .pdf-view-tabs button,
+  .pdf-view-actions a {
+    @apply inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-xs font-semibold text-muted-ink transition-colors hover:bg-brand-soft/40 hover:text-brand;
+  }
+
+  .pdf-view-tabs button.active {
+    @apply bg-brand text-white hover:bg-brand hover:text-white;
+  }
+
+  .pdf-view-tabs svg,
+  .pdf-view-actions svg {
+    @apply size-4;
+  }
+
+  .pdf-pages {
+    @apply mt-3 space-y-5 rounded-xl border border-slate-300 bg-slate-200 p-3 sm:p-5;
+  }
+
+  .pdf-page {
+    @apply relative mx-auto w-full overflow-hidden bg-white shadow-[0_4px_18px_rgba(15,23,42,0.16)];
+  }
+
+  .pdf-page canvas {
+    @apply h-auto max-w-full bg-white;
+  }
+
+  .pdf-page-placeholder {
+    @apply grid aspect-[612/792] w-full place-items-center bg-white text-xs text-muted-ink;
+  }
+
+  .pdf-page figcaption {
+    @apply absolute bottom-2 right-2 rounded bg-slate-950/70 px-2 py-1 text-[10px] text-white;
+  }
+
+  .pdf-viewer-state {
+    @apply mt-3 flex min-h-72 items-center justify-center gap-3 rounded-xl border border-line bg-white p-6 text-sm text-muted-ink;
+  }
+
+  @media (max-width: 640px) {
+    .pdf-view-toolbar {
+      @apply top-14;
+    }
+    .pdf-view-tabs,
+    .pdf-view-tabs button {
+      @apply flex-1;
+    }
+    .pdf-view-actions {
+      @apply w-full border-t border-line pt-2;
+    }
+  }
+
   .note-reader-meta {
     @apply mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-ink;
   }

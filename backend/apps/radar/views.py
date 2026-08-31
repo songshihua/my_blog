@@ -18,12 +18,14 @@ from .serializers import (
     RadarBriefResponseSerializer,
     RadarItemDetailSerializer,
     RadarItemListSerializer,
+    RadarItemSummaryResponseSerializer,
     RadarSourceSerializer,
     RadarStatsSerializer,
     RadarSyncErrorSerializer,
     RadarSyncResponseSerializer,
 )
 from .services import RadarSyncAlreadyRunning, synchronize_source_types
+from .summaries import ItemSummaryBusy, RadarItemSummarizer
 
 BROWSER_SYNC_SOURCE_TYPES = (
     RadarSource.SourceType.ARXIV,
@@ -233,6 +235,42 @@ class RadarBriefAPIView(APIView):
         try:
             return Response(generator.generate())
         except BriefGenerationBusy as exc:
+            return Response({"detail": str(exc)}, status=409)
+        except ProviderResponseError as exc:
+            return Response({"detail": str(exc)}, status=502)
+
+
+class RadarItemSummaryAPIView(APIView):
+    """Generate once and persist a structured summary for one radar item."""
+
+    authentication_classes = ()
+    permission_classes = (CanGenerateLocalRadarBrief,)
+
+    @extend_schema(
+        request=None,
+        responses={
+            200: RadarItemSummaryResponseSerializer,
+            403: RadarSyncErrorSerializer,
+            404: RadarSyncErrorSerializer,
+            409: RadarSyncErrorSerializer,
+            502: RadarSyncErrorSerializer,
+        },
+    )
+    def post(self, _request, pk: int):
+        try:
+            item = (
+                RadarItem.objects.visible()
+                .filter(is_demo=False)
+                .select_related("source")
+                .prefetch_related("topics")
+                .get(pk=pk)
+            )
+        except RadarItem.DoesNotExist:
+            return Response({"detail": "没有找到这条研究内容。"}, status=404)
+
+        try:
+            return Response(RadarItemSummarizer().summarize(item))
+        except ItemSummaryBusy as exc:
             return Response({"detail": str(exc)}, status=409)
         except ProviderResponseError as exc:
             return Response({"detail": str(exc)}, status=502)

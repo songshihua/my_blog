@@ -32,6 +32,10 @@ MAX_DOCX_MEMBERS = 1_500
 MAX_DOCX_MEMBER_BYTES = 16 * 1024 * 1024
 MAX_DOCX_EXPANDED_BYTES = 64 * 1024 * 1024
 MAX_DOCX_COMPRESSION_RATIO = 200
+PDF_TEXT_UNAVAILABLE = (
+    "> 此 PDF 没有可提取的文本内容。请切换到“原版视图”阅读完整页面；"
+    "文本检索和目录功能暂不可用。"
+)
 
 FORMAT_BY_EXTENSION = {
     ".md": ArticleSourceFile.SourceFormat.MARKDOWN,
@@ -353,7 +357,9 @@ def _extract_pdf(content: bytes) -> str:
     except (PdfReadError, ValueError, TypeError, KeyError) as exc:
         raise NoteImportError("PDF 文件损坏或无法安全解析。") from exc
     if not pages:
-        raise NoteImportError("PDF 中没有可提取文字，暂不支持扫描件 OCR。")
+        # The original PDF is still the authoritative visual document. Keep a
+        # useful text-mode notice instead of rejecting scanned/image-only PDFs.
+        return PDF_TEXT_UNAVAILABLE
     return "\n\n---\n\n".join(pages)
 
 

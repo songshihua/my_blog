@@ -11,6 +11,7 @@ import {
   ReadingProgress,
 } from '@/components/notes/article-tools';
 import { NoteDocument } from '@/components/notes/note-document';
+import { PdfNoteReader } from '@/components/notes/pdf-note-reader';
 import { NoteTreeNav } from '@/components/notes/note-tree';
 import { getArticle, getBackendFileUrl, getNoteTree } from '@/lib/api';
 
@@ -54,6 +55,9 @@ export default async function NoteDetailPage({ params }: PageProps) {
 
   const sourceUrl = article.source_file
     ? getBackendFileUrl(article.source_file.download_url)
+    : null;
+  const previewUrl = article.source_file?.preview_url
+    ? getBackendFileUrl(article.source_file.preview_url)
     : null;
   const articleIndex = tree.articles.findIndex(
     (item) => item.slug === article.slug,
@@ -130,15 +134,32 @@ export default async function NoteDetailPage({ params }: PageProps) {
             )}
           </header>
 
-          <NoteDocument
-            markdown={
-              article.body_markdown ||
-              article.summary ||
-              '该文件暂未提取出可展示的正文。'
-            }
-            outline={article.outline ?? []}
-            title={article.title}
-          />
+          {article.source_file?.source_format === 'pdf' &&
+          sourceUrl &&
+          previewUrl ? (
+            <PdfNoteReader
+              downloadUrl={sourceUrl}
+              filename={article.source_file.original_filename}
+              markdown={
+                article.body_markdown ||
+                article.summary ||
+                '该 PDF 暂未提取出可展示的文字。'
+              }
+              outline={article.outline ?? []}
+              previewUrl={previewUrl}
+              title={article.title}
+            />
+          ) : (
+            <NoteDocument
+              markdown={
+                article.body_markdown ||
+                article.summary ||
+                '该文件暂未提取出可展示的正文。'
+              }
+              outline={article.outline ?? []}
+              title={article.title}
+            />
+          )}
 
           {(previous || next) && (
             <nav aria-label="相邻笔记" className="note-reader-pager">
