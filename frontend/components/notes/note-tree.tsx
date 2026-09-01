@@ -1,12 +1,13 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, FileText } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileText, PencilLine } from 'lucide-react';
 import Link from 'next/link';
 
 import { NoteCategoryDialog } from '@/components/notes/note-category-dialog';
 import { NoteManagerDialog } from '@/components/notes/note-manager-dialog';
 import { NoteUploadDialog } from '@/components/notes/note-upload-dialog';
+import { Button } from '@/components/ui/button';
 import type { Article, NoteCategory, NoteTree } from '@/lib/site-data';
 
 type CategoryNode = NoteCategory & {
@@ -132,6 +133,7 @@ export function NoteTreeNav({
   const [expanded, setExpanded] = useState(
     () => new Set(tree.categories.map((category) => category.slug)),
   );
+  const authoringEnabled = tree.authoring_enabled ?? tree.import_enabled;
 
   function toggle(slug: string) {
     setExpanded((current) => {
@@ -156,6 +158,14 @@ export function NoteTreeNav({
         </p>
         {tree.import_enabled && (
           <div className="mt-3 grid grid-cols-2 gap-2">
+            {authoringEnabled && (
+              <Button
+                className="col-span-2 h-10 w-full"
+                render={<Link href="/notes/new" />}
+              >
+                <PencilLine /> 写笔记
+              </Button>
+            )}
             <NoteCategoryDialog
               categories={tree.categories}
               maxDepth={tree.max_category_depth ?? 8}
@@ -194,9 +204,9 @@ export function NoteTreeNav({
         )}
       </nav>
       <div className="border-t border-line p-4 text-[11px] leading-5 text-muted-ink">
-        支持 Markdown、Word DOCX、PDF
+        支持在线写作、图片、彩色高亮
         <br />
-        文件上限 8 MB
+        也可导入 Markdown、Word、PDF
       </div>
     </div>
   );

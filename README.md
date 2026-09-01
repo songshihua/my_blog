@@ -75,13 +75,14 @@ npm run dev
 .\.venv\Scripts\python.exe backend\manage.py createsuperuser
 ```
 
-## 笔记分类与前端文件导入
+## 笔记写作、分类与文件导入
 
-访问 `http://localhost:3000/notes`，可在左侧新建目录、添加笔记或打开“管理笔记”。上传时选择目标目录；管理窗口支持逐篇删除文章，并在目录为空且不包含子目录时删除目录。所有删除操作都有二次确认。
+访问 `http://localhost:3000/notes`，可直接新建或编辑 Markdown 笔记，实时预览排版，插入本地图片并为文字设置五种高亮颜色。图片支持选择文件、粘贴和拖入；也可继续在左侧新建目录、导入已有笔记或打开“管理笔记”。
 
 - 支持 UTF-8 编码的 `.md` / `.markdown`、Word `.docx` 和 `.pdf`（含扫描版）；PDF 可在原版视图与文本视图间切换。
 - 暂不支持旧版 Word `.doc`；扫描版 PDF 暂不执行 OCR，应先在本地转换为可检索 PDF。
 - 单文件默认不超过 8 MB；可通过后端环境变量 `NOTE_UPLOAD_MAX_BYTES` 下调，上限固定为 10 MB。
+- 笔记图片支持 JPEG、PNG、WebP，默认不超过 5 MB；服务端会校验真实格式、限制像素并生成安全文件名。
 - 原文件保存在项目目录 `data/notes/YYYY/MM/`，数据库只保存文章、目录、校验摘要与随机文件路径。
 - `data/notes` 默认被 Git 忽略，避免误把私人文档或大文件上传到 GitHub；需要版本控制的内容应先人工检查后再有选择地调整忽略规则。
 - 分类最多 8 层；删除仍被文章或子目录使用的目录会被前后端共同阻止，避免误删整棵目录。
@@ -91,6 +92,7 @@ npm run dev
 ```dotenv
 NOTE_BROWSER_IMPORT_ENABLED=True
 NOTE_UPLOAD_MAX_BYTES=8388608
+NOTE_IMAGE_UPLOAD_MAX_BYTES=5242880
 ```
 
 拉取包含此功能的新代码后，执行依赖安装和数据库迁移，再重启前后端：

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { FileText, FolderTree, ShieldCheck } from 'lucide-react';
+import { FileText, FolderTree, PencilLine, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 
 import { SiteFooter } from '@/components/layout/site-footer';
@@ -48,8 +48,13 @@ export default async function NotesPage() {
               <span>RESEARCH NOTES</span>
               <h1>技术笔记知识库</h1>
               <p>
-                像目录一样逐层归档内容，从分类进入文章，也可以在左侧直接导入自己的笔记。
+                像目录一样逐层归档内容，可直接写作、插入图片与彩色高亮，也可以导入已有文件。
               </p>
+              {(tree.authoring_enabled ?? tree.import_enabled) && (
+                <Link className="primary-action mt-5" href="/notes/new">
+                  <PencilLine aria-hidden="true" /> 开始写笔记
+                </Link>
+              )}
             </div>
             <div
               className="notes-index-count"

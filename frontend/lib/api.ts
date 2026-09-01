@@ -167,6 +167,23 @@ export class NoteManagementRequestError extends Error {
   }
 }
 
+export class NoteAuthoringRequestError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NoteAuthoringRequestError';
+  }
+}
+
+export type UploadedNoteImage = {
+  id: string;
+  url: string;
+  original_filename: string;
+  content_type: string;
+  size_bytes: number;
+  width: number;
+  height: number;
+};
+
 function firstApiError(payload: Record<string, unknown>): string | null {
   if (typeof payload.detail === 'string') return payload.detail;
   const value = Object.values(payload)
@@ -256,6 +273,116 @@ export async function deleteNoteCategory(slug: string): Promise<void> {
     `/articles/categories/${encodeURIComponent(slug)}/`,
     '删除目录失败',
   );
+}
+
+async function saveNoteArticleRequest(
+  path: string,
+  method: 'POST' | 'PATCH',
+  input: {
+    title: string;
+    summary?: string;
+    categorySlug: string;
+    bodyMarkdown: string;
+  },
+): Promise<Article> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      method,
+      body: JSON.stringify({
+        title: input.title.trim(),
+        summary: input.summary?.trim() ?? '',
+        category_slug: input.categorySlug,
+        body_markdown: input.bodyMarkdown,
+      }),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(30_000),
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+    });
+  } catch (error) {
+    const message =
+      error instanceof DOMException && error.name === 'TimeoutError'
+        ? '保存笔记超时，请稍后重试。'
+        : '无法连接后端写作服务，请确认 Django 已启动。';
+    throw new NoteAuthoringRequestError(message);
+  }
+
+  const payload = (await response.json().catch(() => ({}))) as Record<
+    string,
+    unknown
+  >;
+  if (!response.ok) {
+    throw new NoteAuthoringRequestError(
+      firstApiError(payload) ?? `保存失败（HTTP ${response.status}）。`,
+    );
+  }
+  if (typeof payload.slug !== 'string') {
+    throw new NoteAuthoringRequestError('后端返回了无法识别的笔记数据。');
+  }
+  return payload as Article;
+}
+
+export async function createNoteArticle(input: {
+  title: string;
+  summary?: string;
+  categorySlug: string;
+  bodyMarkdown: string;
+}): Promise<Article> {
+  return saveNoteArticleRequest('/articles/compose/', 'POST', input);
+}
+
+export async function updateNoteArticle(
+  slug: string,
+  input: {
+    title: string;
+    summary?: string;
+    categorySlug: string;
+    bodyMarkdown: string;
+  },
+): Promise<Article> {
+  return saveNoteArticleRequest(
+    `/articles/${encodeURIComponent(slug)}/manage/`,
+    'PATCH',
+    input,
+  );
+}
+
+export async function uploadNoteImage(file: File): Promise<UploadedNoteImage> {
+  const form = new FormData();
+  form.append('image', file);
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/articles/images/`, {
+      method: 'POST',
+      body: form,
+      cache: 'no-store',
+      signal: AbortSignal.timeout(60_000),
+      headers: { Accept: 'application/json' },
+    });
+  } catch (error) {
+    const message =
+      error instanceof DOMException && error.name === 'TimeoutError'
+        ? '图片上传超时，请压缩后重试。'
+        : '无法连接图片上传服务，请确认 Django 已启动。';
+    throw new NoteAuthoringRequestError(message);
+  }
+
+  const payload = (await response.json().catch(() => ({}))) as Record<
+    string,
+    unknown
+  >;
+  if (!response.ok) {
+    throw new NoteAuthoringRequestError(
+      firstApiError(payload) ?? `图片上传失败（HTTP ${response.status}）。`,
+    );
+  }
+  if (typeof payload.id !== 'string' || typeof payload.url !== 'string') {
+    throw new NoteAuthoringRequestError('后端返回了无法识别的图片数据。');
+  }
+  return payload as UploadedNoteImage;
 }
 
 export async function uploadNoteFile(input: {

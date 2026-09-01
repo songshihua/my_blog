@@ -2,7 +2,6 @@ import Link from 'next/link';
 
 const navItems = [
   { href: '/', label: '首页' },
-  { href: '/projects', label: '项目' },
   { href: '/notes', label: '笔记' },
   { href: '/radar', label: 'AI 前沿' },
   { href: '/about', label: '关于我' },

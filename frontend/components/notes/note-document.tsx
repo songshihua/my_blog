@@ -4,6 +4,60 @@ import remarkGfm from 'remark-gfm';
 
 import type { ArticleOutlineItem } from '@/lib/site-data';
 
+type MarkdownNode = {
+  type: string;
+  value?: string;
+  children?: MarkdownNode[];
+  data?: {
+    hName?: string;
+    hProperties?: Record<string, string>;
+  };
+};
+
+const HIGHLIGHT_PATTERN =
+  /==(?:(yellow|green|blue|purple|pink)\|)?(.+?)==/g;
+
+function remarkHighlights() {
+  return (tree: MarkdownNode) => {
+    function transform(parent: MarkdownNode) {
+      if (!parent.children) return;
+      parent.children = parent.children.flatMap((child) => {
+        if (child.type !== 'text' || !child.value?.includes('==')) {
+          transform(child);
+          return [child];
+        }
+
+        const nodes: MarkdownNode[] = [];
+        let cursor = 0;
+        for (const match of child.value.matchAll(HIGHLIGHT_PATTERN)) {
+          const index = match.index ?? 0;
+          if (index > cursor) {
+            nodes.push({ type: 'text', value: child.value.slice(cursor, index) });
+          }
+          nodes.push({
+            type: 'noteHighlight',
+            data: {
+              hName: 'mark',
+              hProperties: {
+                'data-highlight': match[1] || 'yellow',
+              },
+            },
+            children: [{ type: 'text', value: match[2] }],
+          });
+          cursor = index + match[0].length;
+        }
+        if (cursor === 0) return [child];
+        if (cursor < child.value.length) {
+          nodes.push({ type: 'text', value: child.value.slice(cursor) });
+        }
+        return nodes;
+      });
+    }
+
+    transform(tree);
+  };
+}
+
 function nodeText(value: ReactNode): string {
   if (typeof value === 'string' || typeof value === 'number')
     return String(value);
@@ -65,19 +119,29 @@ export function NoteDocument({
       );
     },
     img({ src, alt }) {
-      if (typeof src !== 'string' || !/^https?:\/\//i.test(src))
+      if (
+        typeof src !== 'string' ||
+        (!/^https?:\/\//i.test(src) && !src.startsWith('/media/'))
+      )
         return <span>{alt || '图片'}</span>;
       return (
-        <a href={src} rel="noreferrer noopener" target="_blank">
-          查看图片：{alt || src}
-        </a>
+        // oxlint-disable-next-line next/no-img-element -- Note images have user-defined dimensions and are already normalized on upload.
+        <img
+          alt={alt || '笔记图片'}
+          decoding="async"
+          loading="lazy"
+          src={src}
+        />
       );
     },
   };
 
   return (
     <div className="note-markdown">
-      <Markdown components={components} remarkPlugins={[remarkGfm]}>
+      <Markdown
+        components={components}
+        remarkPlugins={[remarkGfm, remarkHighlights]}
+      >
         {markdown}
       </Markdown>
     </div>

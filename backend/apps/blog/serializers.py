@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import re
 import uuid
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError
 from django.db.models import Max
+from django.utils import timezone
 from django.utils.text import slugify
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
@@ -12,8 +14,22 @@ from rest_framework.reverse import reverse
 
 from apps.core.serializers import TopicSerializer
 
-from .importers import extract_outline
-from .models import MAX_CATEGORY_DEPTH, Article, ArticleSourceFile, Category
+from .importers import (
+    MAX_EXTRACTED_CHARACTERS,
+    _build_slug,
+    _derive_summary,
+    _reading_minutes,
+    extract_outline,
+)
+from .models import (
+    MAX_CATEGORY_DEPTH,
+    Article,
+    ArticleImage,
+    ArticleSourceFile,
+    Category,
+)
+
+NOTE_IMAGE_ID_PATTERN = re.compile(r"\b[0-9a-f]{32}\b", re.IGNORECASE)
 
 
 class CategoryAncestorSerializer(serializers.Serializer):
@@ -183,9 +199,6 @@ class ArticleDetailSerializer(ArticleListSerializer):
 
     @extend_schema_field(serializers.ListField(child=serializers.DictField()))
     def get_outline(self, obj: Article) -> list[dict[str, object]]:
-        source = getattr(obj, "source_file", None)
-        if source is not None and isinstance(source.outline, list):
-            return source.outline
         return extract_outline(obj.body_markdown)
 
     class Meta(ArticleListSerializer.Meta):
@@ -202,7 +215,127 @@ class NoteTreeResponseSerializer(serializers.Serializer):
     categories = CategorySerializer(many=True)
     articles = ArticleListSerializer(many=True)
     import_enabled = serializers.BooleanField()
+    authoring_enabled = serializers.BooleanField()
     max_category_depth = serializers.IntegerField()
+
+
+class NoteWriteRequestSerializer(serializers.Serializer):
+    title = serializers.CharField(max_length=200, trim_whitespace=True)
+    summary = serializers.CharField(
+        max_length=1000,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+    )
+    category_slug = serializers.SlugRelatedField(
+        source="category",
+        slug_field="slug",
+        queryset=Category.objects.all(),
+        error_messages={
+            "does_not_exist": "所选笔记分类不存在。",
+            "invalid": "笔记分类标识无效。",
+        },
+    )
+    body_markdown = serializers.CharField(
+        max_length=MAX_EXTRACTED_CHARACTERS,
+        trim_whitespace=False,
+    )
+
+    def validate_title(self, value: str) -> str:
+        title = " ".join(value.split())
+        if not title:
+            raise serializers.ValidationError("请输入笔记标题。")
+        return title
+
+    def validate_body_markdown(self, value: str) -> str:
+        body = value.strip()
+        if not body:
+            raise serializers.ValidationError("请先写一些笔记内容。")
+        return body
+
+    def create(self, validated_data: dict[str, object]) -> Article:
+        body = str(validated_data["body_markdown"])
+        title = str(validated_data["title"])
+        summary = str(validated_data.get("summary", "") or "").strip()
+        article = Article.objects.create(
+            title=title,
+            slug=_build_slug(title, uuid.uuid4().hex),
+            summary=summary or _derive_summary(body),
+            body_markdown=body,
+            category=validated_data["category"],
+            status=Article.Status.PUBLISHED,
+            published_at=timezone.now(),
+            reading_minutes=_reading_minutes(body),
+            is_demo=False,
+            seo_title=title,
+            seo_description=(summary or _derive_summary(body))[:240],
+        )
+        self._attach_images(article, body)
+        return article
+
+    def update(self, instance: Article, validated_data: dict[str, object]) -> Article:
+        body = str(validated_data.get("body_markdown", instance.body_markdown))
+        title = str(validated_data.get("title", instance.title))
+        summary_value = validated_data.get("summary", instance.summary)
+        summary = str(summary_value or "").strip() or _derive_summary(body)
+        instance.title = title
+        instance.summary = summary
+        instance.body_markdown = body
+        instance.category = validated_data.get("category", instance.category)
+        instance.reading_minutes = _reading_minutes(body)
+        instance.seo_title = title
+        instance.seo_description = summary[:240]
+        instance.is_demo = False
+        instance.save(
+            update_fields=(
+                "title",
+                "summary",
+                "body_markdown",
+                "category",
+                "reading_minutes",
+                "seo_title",
+                "seo_description",
+                "is_demo",
+                "updated_at",
+            )
+        )
+        self._attach_images(instance, body)
+        return instance
+
+    @staticmethod
+    def _attach_images(article: Article, body: str) -> None:
+        public_ids = {match.group(0) for match in NOTE_IMAGE_ID_PATTERN.finditer(body)}
+        if public_ids:
+            ArticleImage.objects.filter(
+                public_id__in=public_ids,
+                article__isnull=True,
+            ).update(article=article)
+
+
+class NoteImageUploadRequestSerializer(serializers.Serializer):
+    image = serializers.FileField(write_only=True)
+
+
+class ArticleImageSerializer(serializers.ModelSerializer):
+    id = serializers.UUIDField(source="public_id", read_only=True)
+    url = serializers.SerializerMethodField()
+
+    @extend_schema_field(serializers.URLField())
+    def get_url(self, obj: ArticleImage) -> str:
+        request = self.context.get("request")
+        return request.build_absolute_uri(obj.file.url) if request else obj.file.url
+
+    class Meta:
+        model = ArticleImage
+        fields = (
+            "id",
+            "url",
+            "original_filename",
+            "content_type",
+            "size_bytes",
+            "width",
+            "height",
+        )
 
 
 class NoteImportRequestSerializer(serializers.Serializer):

@@ -377,7 +377,12 @@ def _clean_text(value: object, maximum: int) -> str:
 
 
 def _plain_markdown(value: str) -> str:
-    text = re.sub(r"!\[([^]]*)]\([^)]*\)", r"\1", value)
+    text = re.sub(
+        r"==(?:(?:yellow|green|blue|purple|pink)\|)?(.+?)==",
+        r"\1",
+        value,
+    )
+    text = re.sub(r"!\[([^]]*)]\([^)]*\)", r"\1", text)
     text = re.sub(r"\[([^]]+)]\([^)]*\)", r"\1", text)
     text = re.sub(r"[`*_~]", "", text)
     return " ".join(text.split())

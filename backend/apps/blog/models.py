@@ -23,6 +23,16 @@ def note_source_upload_to(instance: ArticleSourceFile, _filename: str) -> str:
     return f"{now:%Y/%m}/{uuid.uuid4().hex}.{extension}"
 
 
+def note_image_upload_to(instance: ArticleImage, filename: str) -> str:
+    """Store rendered note images under a server-owned, unguessable name."""
+
+    now = timezone.now()
+    extension = filename.rsplit(".", maxsplit=1)[-1].lower()
+    if extension not in {"jpg", "png"}:
+        extension = "jpg"
+    return f"note-images/{now:%Y/%m}/{instance.public_id.hex}.{extension}"
+
+
 class Category(TimeStampedModel):
     name = models.CharField("名称", max_length=80, unique=True)
     slug = models.SlugField("标识", max_length=100, unique=True)
@@ -154,9 +164,48 @@ class ArticleSourceFile(TimeStampedModel):
         return self.original_filename
 
 
+class ArticleImage(TimeStampedModel):
+    """A sanitized image uploaded from the local note editor."""
+
+    public_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    article = models.ForeignKey(
+        Article,
+        on_delete=models.CASCADE,
+        related_name="images",
+        blank=True,
+        null=True,
+        verbose_name="所属文章",
+    )
+    file = models.ImageField("图片", upload_to=note_image_upload_to, max_length=240)
+    original_filename = models.CharField("原文件名", max_length=240)
+    content_type = models.CharField("内容类型", max_length=40)
+    size_bytes = models.PositiveBigIntegerField("文件大小")
+    width = models.PositiveIntegerField("宽度")
+    height = models.PositiveIntegerField("高度")
+
+    class Meta:
+        ordering = ("-created_at",)
+        verbose_name = "笔记图片"
+        verbose_name_plural = "笔记图片"
+
+    def __str__(self) -> str:
+        return self.original_filename
+
+
 @receiver(post_delete, sender=ArticleSourceFile)
 def delete_note_source_file(sender, instance: ArticleSourceFile, **_kwargs) -> None:
     """Remove private bytes only after the deleting transaction commits."""
+
+    del sender
+    storage = instance.file.storage
+    name = instance.file.name
+    if name:
+        transaction.on_commit(lambda: storage.delete(name))
+
+
+@receiver(post_delete, sender=ArticleImage)
+def delete_note_image_file(sender, instance: ArticleImage, **_kwargs) -> None:
+    """Remove image bytes after their database row is committed as deleted."""
 
     del sender
     storage = instance.file.storage

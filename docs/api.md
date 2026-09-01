@@ -40,6 +40,8 @@
 
 `POST /api/v1/articles/import/` 使用 `multipart/form-data`，字段为 `file`、`category_slug`，以及可选的 `title`、`summary`。服务端只接受 `.md` / `.markdown`、`.docx` 和 `.pdf`，校验声明类型、文件签名、解析边界和内容摘要；同一 SHA-256 的文件重复提交返回 `409`。成功返回完整文章详情并使用 `201`。接口要求 development 模式、`NOTE_BROWSER_IMPORT_ENABLED=True`、loopback 客户端地址与允许的本地 `Origin` 同时满足；production settings 强制关闭。
 
+站内写作使用 `POST /api/v1/articles/compose/` 新建笔记，并用 `PATCH /api/v1/articles/{slug}/manage/` 更新标题、摘要、目录和 Markdown 正文。`POST /api/v1/articles/images/` 接收单张 JPEG、PNG 或 WebP 图片，校验与压缩后返回可插入正文的 URL。三者都沿用同一套可信本机权限；正文高亮保存为受控的 `==color|文字==` 语法，不接受任意 HTML。
+
 PDF 导入会保留原始文件作为视觉权威版本，并通过 `source_file.preview_url` 提供给 PDF.js。提取文本只用于文本视图、目录和检索；纯扫描 PDF 没有可提取文本时仍可导入并使用原版视图。
 
 目录创建、文章删除和目录删除沿用相同的可信本机权限。删除文章会同时清理其源文件记录和私有源文件；目录删除仅允许空目录，若仍包含文章或子目录则返回 `409`。
