@@ -1,5 +1,11 @@
 import type { Metadata } from 'next';
-import { ChevronRight, Download, FileText, Home } from 'lucide-react';
+import {
+  ChevronRight,
+  Download,
+  FileText,
+  Home,
+  PencilLine,
+} from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
@@ -190,6 +196,14 @@ export default async function NoteDetailPage({ params }: PageProps) {
               title={article.title}
             />
             <ReadingProgress />
+            {(tree.authoring_enabled ?? tree.import_enabled) && (
+              <Link
+                className="primary-action w-full"
+                href={`/notes/${article.slug}/edit`}
+              >
+                <PencilLine aria-hidden="true" /> 编辑这篇笔记
+              </Link>
+            )}
             {article.source_file && sourceUrl && (
               <section className="side-card">
                 <h2>原始文件</h2>

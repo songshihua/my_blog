@@ -5,11 +5,13 @@ import {
   BookOpen,
   FileText,
   Folder,
+  Pencil,
   Settings2,
   Trash2,
   TriangleAlert,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 import {
   getNoteCategoryPath,
@@ -309,6 +311,15 @@ export function NoteManagerDialog({
                           {getNoteCategoryPath(category)}
                         </p>
                       </div>
+                      <Button
+                        aria-label={`编辑文章 ${article.title}`}
+                        disabled={submitting}
+                        render={<Link href={`/notes/${article.slug}/edit`} />}
+                        size="sm"
+                        variant="outline"
+                      >
+                        <Pencil /> 编辑
+                      </Button>
                       <Button
                         aria-label={`删除文章 ${article.title}`}
                         disabled={submitting}

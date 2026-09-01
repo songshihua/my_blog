@@ -716,6 +716,216 @@
     @apply bg-slate-50;
   }
 
+  .notes-editor-workspace {
+    @apply items-start;
+  }
+
+  .note-editor-layout {
+    @apply min-w-0 lg:col-start-2 2xl:col-span-2 2xl:grid 2xl:grid-cols-[minmax(0,1fr)_270px];
+  }
+
+  .note-editor-main {
+    @apply min-w-0 bg-white/30;
+  }
+
+  .note-editor-header {
+    @apply flex min-h-28 items-center gap-3 border-b border-line bg-white/55 px-4 py-5 sm:px-7;
+  }
+
+  .note-editor-header > div > span {
+    @apply text-[10px] font-bold tracking-[0.18em] text-brand;
+  }
+
+  .note-editor-back {
+    @apply grid size-9 shrink-0 place-items-center rounded-lg border border-line bg-white text-muted-ink transition-colors hover:border-brand/40 hover:text-brand;
+  }
+
+  .note-editor-back svg {
+    @apply size-4;
+  }
+
+  .note-editor-title {
+    @apply mt-1 h-auto w-full border-0 bg-transparent px-0 py-1 text-2xl font-black tracking-tight shadow-none focus-visible:ring-0 sm:text-3xl;
+  }
+
+  .note-editor-mobile-tabs {
+    @apply grid grid-cols-2 border-b border-line bg-white lg:hidden;
+  }
+
+  .note-editor-mobile-tabs button {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 text-xs font-bold text-muted-ink;
+  }
+
+  .note-editor-mobile-tabs button.active {
+    @apply border-b-2 border-brand bg-brand-soft/25 text-brand;
+  }
+
+  .note-editor-mobile-tabs svg {
+    @apply size-4;
+  }
+
+  .note-editor-toolbar {
+    @apply sticky top-16 z-30 flex min-h-12 items-center gap-1 overflow-x-auto border-b border-line bg-white px-3 py-1.5 shadow-sm sm:px-5;
+  }
+
+  .note-editor-tool-group {
+    @apply flex shrink-0 items-center gap-1 border-r border-line pr-2 last:border-r-0;
+  }
+
+  .note-editor-tool {
+    @apply grid size-8 place-items-center rounded-md text-muted-ink transition-colors hover:bg-brand-soft/55 hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand;
+  }
+
+  .note-editor-tool svg {
+    @apply size-4;
+  }
+
+  .note-editor-highlight-tools {
+    @apply px-1.5;
+  }
+
+  .note-editor-inline-error {
+    @apply border-b border-red-200 bg-red-50 px-5 py-2 text-xs leading-5 text-red-700;
+  }
+
+  .note-editor-highlight-tools > span {
+    @apply mr-1 text-[10px] font-bold text-muted-ink;
+  }
+
+  .note-highlight-swatch {
+    @apply size-5 rounded-full border-2 border-white shadow-[0_0_0_1px_rgba(15,23,42,.18)] transition-transform hover:scale-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand;
+  }
+
+  .note-editor-panes {
+    @apply relative grid min-h-[64dvh] bg-white/35 lg:grid-cols-2;
+  }
+
+  .note-editor-panes.is-dragging {
+    @apply bg-brand-soft/40;
+  }
+
+  .note-editor-write-pane,
+  .note-editor-preview-pane {
+    @apply min-w-0;
+  }
+
+  .note-editor-write-pane {
+    @apply bg-[#fffefb];
+  }
+
+  .note-editor-write-pane textarea {
+    @apply block min-h-[64dvh] w-full resize-none bg-transparent px-5 py-6 text-[15px] leading-8 text-[#252a33] outline-none sm:px-8;
+    font-family: var(--font-geist-mono), ui-monospace, monospace;
+  }
+
+  .note-editor-preview-pane {
+    @apply border-l border-line bg-white px-5 sm:px-8;
+  }
+
+  .note-editor-preview-pane .note-markdown {
+    @apply py-6;
+  }
+
+  .note-editor-panes .mobile-hidden {
+    display: none;
+  }
+
+  .note-editor-empty-preview {
+    @apply grid min-h-[64dvh] place-content-center justify-items-center gap-3 text-center text-xs text-muted-ink;
+  }
+
+  .note-editor-empty-preview svg {
+    @apply size-7 text-brand/50;
+  }
+
+  .note-editor-drop-hint {
+    @apply pointer-events-none absolute inset-4 z-40 grid place-content-center justify-items-center gap-3 rounded-2xl border-2 border-dashed border-brand bg-white/90 text-sm font-bold text-brand shadow-xl;
+  }
+
+  .note-editor-drop-hint svg {
+    @apply size-8;
+  }
+
+  .note-editor-statusbar {
+    @apply flex min-h-10 flex-wrap items-center gap-x-5 gap-y-1 border-y border-line bg-slate-50 px-5 py-2 text-[10px] text-muted-ink;
+  }
+
+  .note-editor-settings {
+    @apply border-t border-line bg-white/28 px-5 py-6 lg:px-8 2xl:min-h-[calc(100dvh-4rem)] 2xl:border-l 2xl:border-t-0 2xl:px-4;
+  }
+
+  .note-editor-settings-sticky {
+    @apply space-y-4 2xl:sticky 2xl:top-20;
+  }
+
+  .note-editor-settings-label {
+    @apply mb-4 block text-base font-black;
+  }
+
+  .note-editor-settings label {
+    @apply mb-1.5 mt-4 block text-xs font-bold text-ink first:mt-0;
+  }
+
+  .note-editor-settings [data-slot='native-select'],
+  .note-editor-settings [data-slot='textarea'] {
+    @apply bg-white;
+  }
+
+  .note-editor-field-help {
+    @apply mt-1 block text-right text-[10px] text-muted-ink;
+  }
+
+  .note-editor-source-notice,
+  .note-editor-tip-card {
+    @apply rounded-xl border p-4;
+  }
+
+  .note-editor-source-notice {
+    @apply border-amber-200 bg-amber-50 text-amber-950;
+  }
+
+  .note-editor-tip-card {
+    @apply border-brand/20 bg-brand-soft/25;
+  }
+
+  .note-editor-source-notice strong,
+  .note-editor-tip-card strong {
+    @apply text-xs font-black;
+  }
+
+  .note-editor-source-notice p,
+  .note-editor-tip-card p {
+    @apply mt-1 text-[11px] leading-5 text-muted-ink;
+  }
+
+  .note-editor-actions {
+    @apply grid gap-2;
+  }
+
+  .note-editor-actions > button {
+    @apply h-10 w-full;
+  }
+
+  .note-editor-actions > span {
+    @apply text-center text-[10px] text-muted-ink;
+  }
+
+  .note-editor-unavailable {
+    @apply grid min-h-[70dvh] min-w-0 place-content-center justify-items-center gap-3 px-6 text-center lg:col-start-2 2xl:col-span-2;
+  }
+
+  .note-editor-unavailable > svg {
+    @apply size-9 text-brand;
+  }
+
+  .note-editor-unavailable h1 {
+    @apply text-2xl font-black;
+  }
+
+  .note-editor-unavailable p {
+    @apply text-sm text-muted-ink;
+  }
+
   .note-reader {
     @apply min-w-0 px-5 py-6 sm:px-8 lg:px-10 lg:py-8;
   }
@@ -907,6 +1117,42 @@
   }
   .note-markdown input[type='checkbox'] {
     @apply mr-2 align-middle accent-brand;
+  }
+
+  .note-markdown img {
+    @apply my-6 h-auto max-h-[720px] w-auto max-w-full rounded-xl border border-line bg-white object-contain shadow-sm;
+  }
+
+  .note-markdown mark {
+    @apply rounded px-1 py-0.5 text-inherit;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+
+  .note-markdown mark[data-highlight='yellow'] {
+    background-color: #fde68a;
+  }
+
+  .note-markdown mark[data-highlight='green'] {
+    background-color: #a7f3d0;
+  }
+
+  .note-markdown mark[data-highlight='blue'] {
+    background-color: #bae6fd;
+  }
+
+  .note-markdown mark[data-highlight='purple'] {
+    background-color: #ddd6fe;
+  }
+
+  .note-markdown mark[data-highlight='pink'] {
+    background-color: #fbcfe8;
+  }
+
+  @media (min-width: 1024px) {
+    .note-editor-panes .mobile-hidden {
+      display: block;
+    }
   }
 
   .note-reader-pager {

@@ -53,10 +53,7 @@ export default async function HomePage() {
               Serving。
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
-              <Link className="primary-action" href="/projects">
-                查看研究 <SiteIcon name="arrow" />
-              </Link>
-              <Link className="secondary-action" href="/radar">
+              <Link className="primary-action" href="/radar">
                 进入 AI 前沿 <SiteIcon name="arrow" />
               </Link>
             </div>

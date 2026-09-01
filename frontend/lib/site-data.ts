@@ -78,6 +78,7 @@ export type NoteTree = {
   categories: NoteCategory[];
   articles: Article[];
   import_enabled: boolean;
+  authoring_enabled: boolean;
   max_category_depth: number;
 };
 
@@ -337,6 +338,7 @@ export const demoNoteTree: NoteTree = {
   ],
   articles: demoArticles,
   import_enabled: false,
+  authoring_enabled: false,
   max_category_depth: 8,
 };
 

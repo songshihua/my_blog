@@ -90,7 +90,7 @@ export function NoteUploadDialog({
   return (
     <Dialog open={open} onOpenChange={changeOpen}>
       <DialogTrigger render={<Button className="h-10 w-full justify-center" />}>
-        <Plus /> 添加笔记
+        <Plus /> 导入文件
       </DialogTrigger>
       <DialogContent className="note-author-dialog sm:max-w-xl">
         <DialogHeader>

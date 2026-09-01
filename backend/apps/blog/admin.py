@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Article, ArticleSourceFile, Category
+from .models import Article, ArticleImage, ArticleSourceFile, Category
 
 
 @admin.register(Category)
@@ -28,6 +28,22 @@ class ArticleSourceFileInline(admin.StackedInline):
     )
 
 
+class ArticleImageInline(admin.TabularInline):
+    model = ArticleImage
+    extra = 0
+    can_delete = True
+    readonly_fields = (
+        "public_id",
+        "original_filename",
+        "content_type",
+        "size_bytes",
+        "width",
+        "height",
+        "created_at",
+        "updated_at",
+    )
+
+
 @admin.register(Article)
 class ArticleAdmin(admin.ModelAdmin):
     list_display = (
@@ -44,4 +60,4 @@ class ArticleAdmin(admin.ModelAdmin):
     prepopulated_fields = {"slug": ("title",)}
     search_fields = ("title", "summary", "body_markdown")
     filter_horizontal = ("topics",)
-    inlines = (ArticleSourceFileInline,)
+    inlines = (ArticleSourceFileInline, ArticleImageInline)

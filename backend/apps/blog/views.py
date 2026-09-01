@@ -11,23 +11,27 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
+from .images import NoteImageError, save_note_image
 from .importers import DuplicateNoteError, NoteImportError, import_note
 from .models import MAX_CATEGORY_DEPTH, Article, ArticleSourceFile, Category
 from .permissions import CanUseLocalNoteImport
 from .serializers import (
     ArticleDetailSerializer,
+    ArticleImageSerializer,
     ArticleListSerializer,
     CategoryCreateRequestSerializer,
     CategorySerializer,
+    NoteImageUploadRequestSerializer,
     NoteImportErrorSerializer,
     NoteImportRequestSerializer,
     NoteTreeResponseSerializer,
+    NoteWriteRequestSerializer,
 )
 
 
 class ArticleViewSet(ReadOnlyModelViewSet):
     permission_classes = (AllowAny,)
-    http_method_names = ("get", "post", "delete", "head", "options")
+    http_method_names = ("get", "post", "patch", "delete", "head", "options")
     lookup_field = "slug"
     filter_backends = (DjangoFilterBackend, SearchFilter, OrderingFilter)
     filterset_fields = ("category__slug", "topics__slug", "is_featured")
@@ -61,8 +65,63 @@ class ArticleViewSet(ReadOnlyModelViewSet):
                     articles, many=True, context={"request": request}
                 ).data,
                 "import_enabled": bool(settings.DEBUG and settings.NOTE_BROWSER_IMPORT_ENABLED),
+                "authoring_enabled": bool(
+                    settings.DEBUG and settings.NOTE_BROWSER_IMPORT_ENABLED
+                ),
                 "max_category_depth": MAX_CATEGORY_DEPTH,
             }
+        )
+
+    @extend_schema(
+        request=NoteWriteRequestSerializer,
+        responses={
+            201: ArticleDetailSerializer,
+            400: NoteImportErrorSerializer,
+            403: NoteImportErrorSerializer,
+        },
+    )
+    @action(
+        detail=False,
+        methods=("post",),
+        url_path="compose",
+        authentication_classes=(),
+        permission_classes=(CanUseLocalNoteImport,),
+    )
+    def compose(self, request):
+        serializer = NoteWriteRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        article = serializer.save()
+        return Response(
+            ArticleDetailSerializer(article, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @extend_schema(
+        request=NoteImageUploadRequestSerializer,
+        responses={
+            201: ArticleImageSerializer,
+            400: NoteImportErrorSerializer,
+            403: NoteImportErrorSerializer,
+        },
+    )
+    @action(
+        detail=False,
+        methods=("post",),
+        url_path="images",
+        authentication_classes=(),
+        permission_classes=(CanUseLocalNoteImport,),
+        parser_classes=(MultiPartParser, FormParser),
+    )
+    def upload_image(self, request):
+        serializer = NoteImageUploadRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            image = save_note_image(serializer.validated_data["image"])
+        except NoteImageError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            ArticleImageSerializer(image, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
         )
 
     @extend_schema(
@@ -196,19 +255,40 @@ class ArticleViewSet(ReadOnlyModelViewSet):
         return response
 
     @extend_schema(
+        methods=("PATCH",),
+        request=NoteWriteRequestSerializer,
+        responses={
+            200: ArticleDetailSerializer,
+            400: NoteImportErrorSerializer,
+            403: NoteImportErrorSerializer,
+        },
+    )
+    @extend_schema(
+        methods=("DELETE",),
         request=None,
         responses={204: None, 403: NoteImportErrorSerializer},
     )
     @action(
         detail=True,
-        methods=("delete",),
+        methods=("patch", "delete"),
         url_path="manage",
         url_name="manage",
         authentication_classes=(),
         permission_classes=(CanUseLocalNoteImport,),
     )
-    def delete_note(self, _request, slug=None):
+    def manage_note(self, request, slug=None):
         article = self.get_object()
+        if request.method == "PATCH":
+            serializer = NoteWriteRequestSerializer(
+                article,
+                data=request.data,
+                partial=True,
+            )
+            serializer.is_valid(raise_exception=True)
+            article = serializer.save()
+            return Response(
+                ArticleDetailSerializer(article, context={"request": request}).data
+            )
         article.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 

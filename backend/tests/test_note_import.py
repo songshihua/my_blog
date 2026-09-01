@@ -9,10 +9,11 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.utils import timezone
 from docx import Document
+from PIL import Image
 from rest_framework.test import APIClient
 
 from apps.blog.importers import NoteImportError, extract_uploaded_note
-from apps.blog.models import Article, ArticleSourceFile, Category
+from apps.blog.models import Article, ArticleImage, ArticleSourceFile, Category
 
 
 @pytest.fixture
@@ -58,6 +59,14 @@ def make_pdf(text: str = "Readable PDF note") -> bytes:
         f"startxref\n{xref_offset}\n%%EOF\n".encode()
     )
     return bytes(payload)
+
+
+def make_raster(image_format: str = "PNG", size: tuple[int, int] = (48, 32)) -> bytes:
+    mode = "RGBA" if image_format == "PNG" else "RGB"
+    color = (49, 92, 255, 255) if mode == "RGBA" else (49, 92, 255)
+    buffer = BytesIO()
+    Image.new(mode, size, color).save(buffer, format=image_format)
+    return buffer.getvalue()
 
 
 def make_docx() -> bytes:
@@ -469,3 +478,209 @@ def test_note_management_delete_rejects_untrusted_origin(api_client, published_a
 
     assert response.status_code == 403
     assert Article.objects.filter(pk=published_article.pk).exists()
+
+
+@pytest.fixture
+def note_media_root(settings):
+    directory = Path(settings.REPOSITORY_DIR) / "data" / "media"
+    directory.mkdir(parents=True, exist_ok=True)
+    existing_files = {path.resolve() for path in directory.rglob("*") if path.is_file()}
+    yield directory
+    for path in directory.rglob("*"):
+        if path.is_file() and path.resolve() not in existing_files:
+            path.unlink()
+
+
+@pytest.fixture
+def trusted_note_authoring(settings, note_media_root):
+    settings.DEBUG = True
+    settings.NOTE_BROWSER_IMPORT_ENABLED = True
+    settings.NOTE_IMAGE_UPLOAD_MAX_BYTES = 1024 * 1024
+    settings.MEDIA_ROOT = note_media_root
+    settings.CORS_ALLOWED_ORIGINS = ["http://localhost:3000"]
+    return {
+        "HTTP_ORIGIN": "http://localhost:3000",
+        "REMOTE_ADDR": "127.0.0.1",
+    }
+
+
+@pytest.mark.django_db
+def test_trusted_local_frontend_composes_note(api_client, category, trusted_note_authoring):
+    body = "# 训练记录\n\n==purple|需要复现的关键结论=="
+
+    response = api_client.post(
+        reverse("article-compose"),
+        {
+            "title": "我的手写笔记",
+            "summary": "颜色高亮测试",
+            "category_slug": category.slug,
+            "body_markdown": body,
+        },
+        format="json",
+        **trusted_note_authoring,
+    )
+
+    assert response.status_code == 201
+    article = Article.objects.get(slug=response.data["slug"])
+    assert article.title == "我的手写笔记"
+    assert article.body_markdown == body
+    assert article.category == category
+    assert article.status == Article.Status.PUBLISHED
+    assert article.published_at is not None
+    assert article.is_demo is False
+    assert response.data["outline"][0]["text"] == "训练记录"
+
+
+@pytest.mark.django_db
+def test_trusted_local_frontend_updates_note_and_keeps_slug(
+    api_client, published_article, trusted_note_authoring
+):
+    original_slug = published_article.slug
+    original_category_id = published_article.category_id
+    body = "# 更新后的目录\n\n==green|新的重点内容=="
+
+    response = api_client.patch(
+        reverse("article-manage", kwargs={"slug": original_slug}),
+        {"title": "更新后的标题", "body_markdown": body},
+        format="json",
+        **trusted_note_authoring,
+    )
+
+    assert response.status_code == 200
+    published_article.refresh_from_db()
+    assert published_article.slug == original_slug
+    assert published_article.title == "更新后的标题"
+    assert published_article.body_markdown == body
+    assert published_article.category_id == original_category_id
+    assert published_article.summary == "公开摘要"
+    assert response.data["outline"][0]["text"] == "更新后的目录"
+
+
+@pytest.mark.django_db
+def test_note_image_upload_normalizes_and_attaches_on_compose(
+    api_client, category, trusted_note_authoring
+):
+    upload = api_client.post(
+        reverse("article-upload-image"),
+        {
+            "image": SimpleUploadedFile(
+                "diagram.png",
+                make_raster("PNG"),
+                content_type="image/png",
+            )
+        },
+        format="multipart",
+        **trusted_note_authoring,
+    )
+
+    assert upload.status_code == 201
+    assert upload.data["content_type"] == "image/png"
+    assert upload.data["width"] == 48
+    assert upload.data["height"] == 32
+    assert "/media/note-images/" in upload.data["url"]
+    image = ArticleImage.objects.get(public_id=upload.data["id"])
+    assert image.article_id is None
+    assert Path(image.file.path).exists()
+
+    compose = api_client.post(
+        reverse("article-compose"),
+        {
+            "title": "带图片的笔记",
+            "category_slug": category.slug,
+            "body_markdown": f"# 图片\n\n![架构图]({upload.data['url']})",
+        },
+        format="json",
+        **trusted_note_authoring,
+    )
+
+    assert compose.status_code == 201
+    image.refresh_from_db()
+    assert image.article.slug == compose.data["slug"]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("case", ("spoofed_format", "too_large"))
+def test_note_image_upload_rejects_invalid_content(
+    case, api_client, settings, trusted_note_authoring
+):
+    settings.NOTE_IMAGE_UPLOAD_MAX_BYTES = 1024
+    if case == "spoofed_format":
+        uploaded = SimpleUploadedFile(
+            "looks-valid.png",
+            make_raster("GIF"),
+            content_type="image/png",
+        )
+        expected = "仅支持 JPEG、PNG 和 WebP"
+    else:
+        uploaded = SimpleUploadedFile(
+            "large.png",
+            b"x" * 1025,
+            content_type="image/png",
+        )
+        expected = "图片不能超过"
+
+    response = api_client.post(
+        reverse("article-upload-image"),
+        {"image": uploaded},
+        format="multipart",
+        **trusted_note_authoring,
+    )
+
+    assert response.status_code == 400
+    assert expected in response.data["detail"]
+    assert ArticleImage.objects.count() == 0
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("endpoint", ("compose", "patch", "image"))
+def test_note_authoring_endpoints_reject_untrusted_origin(
+    endpoint,
+    api_client,
+    category,
+    published_article,
+    trusted_note_authoring,
+):
+    request_meta = {
+        **trusted_note_authoring,
+        "HTTP_ORIGIN": "https://malicious.example",
+    }
+    article_count = Article.objects.count()
+    original_title = published_article.title
+
+    if endpoint == "compose":
+        response = api_client.post(
+            reverse("article-compose"),
+            {
+                "title": "不应创建",
+                "category_slug": category.slug,
+                "body_markdown": "# 不应创建",
+            },
+            format="json",
+            **request_meta,
+        )
+    elif endpoint == "patch":
+        response = api_client.patch(
+            reverse("article-manage", kwargs={"slug": published_article.slug}),
+            {"title": "不应更新"},
+            format="json",
+            **request_meta,
+        )
+    else:
+        response = api_client.post(
+            reverse("article-upload-image"),
+            {
+                "image": SimpleUploadedFile(
+                    "blocked.png",
+                    make_raster(),
+                    content_type="image/png",
+                )
+            },
+            format="multipart",
+            **request_meta,
+        )
+
+    assert response.status_code == 403
+    assert Article.objects.count() == article_count
+    assert ArticleImage.objects.count() == 0
+    published_article.refresh_from_db()
+    assert published_article.title == original_title
