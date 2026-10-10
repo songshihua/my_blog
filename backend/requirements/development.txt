@@ -1,8 +1,8 @@
 -r base.txt
-pytest>=8.3,<9
+pytest>=9.1.1,<10
 pytest-django>=4.11,<5
-pytest-cov>=6,<7
+pytest-cov>=7.1.0,<8
 factory-boy>=3.3,<4
-ruff>=0.12,<1
-mypy>=1.17,<2
-django-stubs>=5.2,<5.3
+ruff>=0.16.10,<1
+mypy>=2.4.0,<3
+django-stubs>=6.1.2,<6.2
